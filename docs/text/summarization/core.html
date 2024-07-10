@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.9.2" />
+<meta name="generator" content="pdoc 0.10.0" />
 <title>ktrain.text.summarization.core API documentation</title>
 <meta name="description" content="" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
@@ -27,12 +27,14 @@
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">from ...torch_base import TorchBase
+
+
 class TransformerSummarizer(TorchBase):
     &#34;&#34;&#34;
     interface to Transformer-based text summarization
     &#34;&#34;&#34;
 
-    def __init__(self, model_name=&#39;facebook/bart-large-cnn&#39;, device=None):
+    def __init__(self, model_name=&#34;facebook/bart-large-cnn&#34;, device=None):
         &#34;&#34;&#34;
         ```
         interface to BART-based text summarization using transformers library
@@ -42,18 +44,29 @@ class TransformerSummarizer(TorchBase):
           device(str): device to use (e.g., &#39;cuda&#39;, &#39;cpu&#39;)
         ```
         &#34;&#34;&#34;
-        if &#39;bart&#39; not in model_name:
-            raise ValueError(&#39;TransformerSummarizer currently only accepts BART models&#39;)
+        if &#34;bart&#34; not in model_name:
+            raise ValueError(&#34;TransformerSummarizer currently only accepts BART models&#34;)
         super().__init__(device=device)
-        from transformers import BartTokenizer, BartForConditionalGeneration
+        from transformers import BartForConditionalGeneration, BartTokenizer
+
         self.tokenizer = BartTokenizer.from_pretrained(model_name)
-        self.model = BartForConditionalGeneration.from_pretrained(model_name).to(self.torch_device)
+        self.model = BartForConditionalGeneration.from_pretrained(model_name).to(
+            self.torch_device
+        )
 
-
-    def summarize(self, doc):
+    def summarize(
+        self,
+        doc,
+        max_length=150,
+        min_length=56,
+        no_repeat_ngram_size=3,
+        length_penalty=2.0,
+        num_beams=4,
+        **kwargs,
+    ):
         &#34;&#34;&#34;
         ```
-        summarize document text
+        Summarize document text.  Extra arguments are fed to generate method
         Args:
           doc(str): text of document
         Returns:
@@ -61,19 +74,101 @@ class TransformerSummarizer(TorchBase):
         ```
         &#34;&#34;&#34;
         import torch
-        with torch.no_grad():
-            answers_input_ids = self.tokenizer.batch_encode_plus([doc], 
-                                                                 return_tensors=&#39;pt&#39;, truncation=True,
-                                                                 max_length=1024)[&#39;input_ids&#39;].to(self.torch_device)
-            summary_ids = self.model.generate(answers_input_ids,
-                                              num_beams=4,
-                                              length_penalty=2.0,
-                                              max_length=142,
-                                              min_length=56,
-                                              no_repeat_ngram_size=3)
 
-            exec_sum = self.tokenizer.decode(summary_ids.squeeze(), skip_special_tokens=True)
-        return exec_sum</code></pre>
+        with torch.no_grad():
+            answers_input_ids = self.tokenizer.batch_encode_plus(
+                [doc], return_tensors=&#34;pt&#34;, truncation=True, max_length=1024
+            )[&#34;input_ids&#34;].to(self.torch_device)
+            summary_ids = self.model.generate(
+                answers_input_ids,
+                num_beams=num_beams,
+                length_penalty=length_penalty,
+                max_length=max_length,
+                min_length=min_length,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                **kwargs,
+            )
+
+            exec_sum = self.tokenizer.decode(
+                summary_ids.squeeze(), skip_special_tokens=True
+            )
+        return exec_sum
+
+
+class LexRankSummarizer:
+    &#34;&#34;&#34;
+    interface to Lexrank-based text summarization
+    &#34;&#34;&#34;
+
+    def __init__(self, language=&#34;english&#34;):
+        &#34;&#34;&#34;
+        ```
+        interface to Lexrank-based text summarization using sumy library
+
+        Args:
+          language(str): default is &#34;english&#34;
+        ```
+        &#34;&#34;&#34;
+
+        try:
+            from sumy.nlp.stemmers import Stemmer
+            from sumy.summarizers.lex_rank import LexRankSummarizer as Summarizer
+            from sumy.utils import get_stop_words
+        except ImportError:
+            raise ImportError(&#34;Please install the sumy package: pip install sumy&#34;)
+
+        self.language = language
+        stemmer = Stemmer(self.language)
+        self.summarizer = Summarizer(stemmer)
+        self.summarizer.stop_words = get_stop_words(self.language)
+
+    def summarize(
+        self,
+        doc,
+        num_sentences=3,
+        maximum_length=2000,
+        minimum_length=40,
+        join_sentences=True,
+        num_candidate_sentences=100,
+        **kwargs,
+    ):
+        &#34;&#34;&#34;
+        ```
+        summarize document text
+        Args:
+          doc(str): text of document
+          num_sentences(int): Number of sentences for summary
+          maximum_length(int): Maximum length of sentence in summary
+          minimumlength(int): Minimum length of sentence in summary
+          join_sentences(bool): If True, summary is a single string instead of a list of sentences.
+          num_candidate_sentences(int): Number of candidate sentences from which to select final summary.
+        Returns:
+          str: summary text
+        ```
+        &#34;&#34;&#34;
+        from sumy.nlp.tokenizers import Tokenizer
+        from sumy.parsers.html import HtmlParser
+        from sumy.parsers.plaintext import PlaintextParser
+
+        parser = PlaintextParser.from_string(doc, Tokenizer(self.language))
+        results = []
+        for sentence in self.summarizer(parser.document, num_candidate_sentences):
+            if (
+                len(sentence._text) &gt; maximum_length
+                or len(sentence._text) &lt; minimum_length
+                or sentence._text[0].isdigit()
+            ):
+                continue
+            results.append(
+                sentence._text + &#34;.&#34;
+                if sentence._text[-1] not in [&#34;.&#34;, &#34;?&#34;, &#34;!&#34;, &#34;;&#34;]
+                else sentence._text
+            )
+        return (
+            &#34; &#34;.join(results[:num_sentences])
+            if join_sentences
+            else results[:num_sentences]
+        )</code></pre>
 </details>
 </section>
 <section>
@@ -85,6 +180,168 @@ class TransformerSummarizer(TorchBase):
 <section>
 <h2 class="section-title" id="header-classes">Classes</h2>
 <dl>
+<dt id="ktrain.text.summarization.core.LexRankSummarizer"><code class="flex name class">
+<span>class <span class="ident">LexRankSummarizer</span></span>
+<span>(</span><span>language='english')</span>
+</code></dt>
+<dd>
+<div class="desc"><p>interface to Lexrank-based text summarization</p>
+<pre><code>interface to Lexrank-based text summarization using sumy library
+
+Args:
+  language(str): default is &quot;english&quot;
+</code></pre></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class LexRankSummarizer:
+    &#34;&#34;&#34;
+    interface to Lexrank-based text summarization
+    &#34;&#34;&#34;
+
+    def __init__(self, language=&#34;english&#34;):
+        &#34;&#34;&#34;
+        ```
+        interface to Lexrank-based text summarization using sumy library
+
+        Args:
+          language(str): default is &#34;english&#34;
+        ```
+        &#34;&#34;&#34;
+
+        try:
+            from sumy.nlp.stemmers import Stemmer
+            from sumy.summarizers.lex_rank import LexRankSummarizer as Summarizer
+            from sumy.utils import get_stop_words
+        except ImportError:
+            raise ImportError(&#34;Please install the sumy package: pip install sumy&#34;)
+
+        self.language = language
+        stemmer = Stemmer(self.language)
+        self.summarizer = Summarizer(stemmer)
+        self.summarizer.stop_words = get_stop_words(self.language)
+
+    def summarize(
+        self,
+        doc,
+        num_sentences=3,
+        maximum_length=2000,
+        minimum_length=40,
+        join_sentences=True,
+        num_candidate_sentences=100,
+        **kwargs,
+    ):
+        &#34;&#34;&#34;
+        ```
+        summarize document text
+        Args:
+          doc(str): text of document
+          num_sentences(int): Number of sentences for summary
+          maximum_length(int): Maximum length of sentence in summary
+          minimumlength(int): Minimum length of sentence in summary
+          join_sentences(bool): If True, summary is a single string instead of a list of sentences.
+          num_candidate_sentences(int): Number of candidate sentences from which to select final summary.
+        Returns:
+          str: summary text
+        ```
+        &#34;&#34;&#34;
+        from sumy.nlp.tokenizers import Tokenizer
+        from sumy.parsers.html import HtmlParser
+        from sumy.parsers.plaintext import PlaintextParser
+
+        parser = PlaintextParser.from_string(doc, Tokenizer(self.language))
+        results = []
+        for sentence in self.summarizer(parser.document, num_candidate_sentences):
+            if (
+                len(sentence._text) &gt; maximum_length
+                or len(sentence._text) &lt; minimum_length
+                or sentence._text[0].isdigit()
+            ):
+                continue
+            results.append(
+                sentence._text + &#34;.&#34;
+                if sentence._text[-1] not in [&#34;.&#34;, &#34;?&#34;, &#34;!&#34;, &#34;;&#34;]
+                else sentence._text
+            )
+        return (
+            &#34; &#34;.join(results[:num_sentences])
+            if join_sentences
+            else results[:num_sentences]
+        )</code></pre>
+</details>
+<h3>Methods</h3>
+<dl>
+<dt id="ktrain.text.summarization.core.LexRankSummarizer.summarize"><code class="name flex">
+<span>def <span class="ident">summarize</span></span>(<span>self, doc, num_sentences=3, maximum_length=2000, minimum_length=40, join_sentences=True, num_candidate_sentences=100, **kwargs)</span>
+</code></dt>
+<dd>
+<div class="desc"><pre><code>summarize document text
+Args:
+  doc(str): text of document
+  num_sentences(int): Number of sentences for summary
+  maximum_length(int): Maximum length of sentence in summary
+  minimumlength(int): Minimum length of sentence in summary
+  join_sentences(bool): If True, summary is a single string instead of a list of sentences.
+  num_candidate_sentences(int): Number of candidate sentences from which to select final summary.
+Returns:
+  str: summary text
+</code></pre></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def summarize(
+    self,
+    doc,
+    num_sentences=3,
+    maximum_length=2000,
+    minimum_length=40,
+    join_sentences=True,
+    num_candidate_sentences=100,
+    **kwargs,
+):
+    &#34;&#34;&#34;
+    ```
+    summarize document text
+    Args:
+      doc(str): text of document
+      num_sentences(int): Number of sentences for summary
+      maximum_length(int): Maximum length of sentence in summary
+      minimumlength(int): Minimum length of sentence in summary
+      join_sentences(bool): If True, summary is a single string instead of a list of sentences.
+      num_candidate_sentences(int): Number of candidate sentences from which to select final summary.
+    Returns:
+      str: summary text
+    ```
+    &#34;&#34;&#34;
+    from sumy.nlp.tokenizers import Tokenizer
+    from sumy.parsers.html import HtmlParser
+    from sumy.parsers.plaintext import PlaintextParser
+
+    parser = PlaintextParser.from_string(doc, Tokenizer(self.language))
+    results = []
+    for sentence in self.summarizer(parser.document, num_candidate_sentences):
+        if (
+            len(sentence._text) &gt; maximum_length
+            or len(sentence._text) &lt; minimum_length
+            or sentence._text[0].isdigit()
+        ):
+            continue
+        results.append(
+            sentence._text + &#34;.&#34;
+            if sentence._text[-1] not in [&#34;.&#34;, &#34;?&#34;, &#34;!&#34;, &#34;;&#34;]
+            else sentence._text
+        )
+    return (
+        &#34; &#34;.join(results[:num_sentences])
+        if join_sentences
+        else results[:num_sentences]
+    )</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
 <dt id="ktrain.text.summarization.core.TransformerSummarizer"><code class="flex name class">
 <span>class <span class="ident">TransformerSummarizer</span></span>
 <span>(</span><span>model_name='facebook/bart-large-cnn', device=None)</span>
@@ -106,7 +363,7 @@ Args:
     interface to Transformer-based text summarization
     &#34;&#34;&#34;
 
-    def __init__(self, model_name=&#39;facebook/bart-large-cnn&#39;, device=None):
+    def __init__(self, model_name=&#34;facebook/bart-large-cnn&#34;, device=None):
         &#34;&#34;&#34;
         ```
         interface to BART-based text summarization using transformers library
@@ -116,18 +373,29 @@ Args:
           device(str): device to use (e.g., &#39;cuda&#39;, &#39;cpu&#39;)
         ```
         &#34;&#34;&#34;
-        if &#39;bart&#39; not in model_name:
-            raise ValueError(&#39;TransformerSummarizer currently only accepts BART models&#39;)
+        if &#34;bart&#34; not in model_name:
+            raise ValueError(&#34;TransformerSummarizer currently only accepts BART models&#34;)
         super().__init__(device=device)
-        from transformers import BartTokenizer, BartForConditionalGeneration
+        from transformers import BartForConditionalGeneration, BartTokenizer
+
         self.tokenizer = BartTokenizer.from_pretrained(model_name)
-        self.model = BartForConditionalGeneration.from_pretrained(model_name).to(self.torch_device)
+        self.model = BartForConditionalGeneration.from_pretrained(model_name).to(
+            self.torch_device
+        )
 
-
-    def summarize(self, doc):
+    def summarize(
+        self,
+        doc,
+        max_length=150,
+        min_length=56,
+        no_repeat_ngram_size=3,
+        length_penalty=2.0,
+        num_beams=4,
+        **kwargs,
+    ):
         &#34;&#34;&#34;
         ```
-        summarize document text
+        Summarize document text.  Extra arguments are fed to generate method
         Args:
           doc(str): text of document
         Returns:
@@ -135,18 +403,24 @@ Args:
         ```
         &#34;&#34;&#34;
         import torch
-        with torch.no_grad():
-            answers_input_ids = self.tokenizer.batch_encode_plus([doc], 
-                                                                 return_tensors=&#39;pt&#39;, truncation=True,
-                                                                 max_length=1024)[&#39;input_ids&#39;].to(self.torch_device)
-            summary_ids = self.model.generate(answers_input_ids,
-                                              num_beams=4,
-                                              length_penalty=2.0,
-                                              max_length=142,
-                                              min_length=56,
-                                              no_repeat_ngram_size=3)
 
-            exec_sum = self.tokenizer.decode(summary_ids.squeeze(), skip_special_tokens=True)
+        with torch.no_grad():
+            answers_input_ids = self.tokenizer.batch_encode_plus(
+                [doc], return_tensors=&#34;pt&#34;, truncation=True, max_length=1024
+            )[&#34;input_ids&#34;].to(self.torch_device)
+            summary_ids = self.model.generate(
+                answers_input_ids,
+                num_beams=num_beams,
+                length_penalty=length_penalty,
+                max_length=max_length,
+                min_length=min_length,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                **kwargs,
+            )
+
+            exec_sum = self.tokenizer.decode(
+                summary_ids.squeeze(), skip_special_tokens=True
+            )
         return exec_sum</code></pre>
 </details>
 <h3>Ancestors</h3>
@@ -156,10 +430,10 @@ Args:
 <h3>Methods</h3>
 <dl>
 <dt id="ktrain.text.summarization.core.TransformerSummarizer.summarize"><code class="name flex">
-<span>def <span class="ident">summarize</span></span>(<span>self, doc)</span>
+<span>def <span class="ident">summarize</span></span>(<span>self, doc, max_length=150, min_length=56, no_repeat_ngram_size=3, length_penalty=2.0, num_beams=4, **kwargs)</span>
 </code></dt>
 <dd>
-<div class="desc"><pre><code>summarize document text
+<div class="desc"><pre><code>Summarize document text.  Extra arguments are fed to generate method
 Args:
   doc(str): text of document
 Returns:
@@ -169,10 +443,19 @@ Returns:
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def summarize(self, doc):
+<pre><code class="python">def summarize(
+    self,
+    doc,
+    max_length=150,
+    min_length=56,
+    no_repeat_ngram_size=3,
+    length_penalty=2.0,
+    num_beams=4,
+    **kwargs,
+):
     &#34;&#34;&#34;
     ```
-    summarize document text
+    Summarize document text.  Extra arguments are fed to generate method
     Args:
       doc(str): text of document
     Returns:
@@ -180,18 +463,24 @@ Returns:
     ```
     &#34;&#34;&#34;
     import torch
-    with torch.no_grad():
-        answers_input_ids = self.tokenizer.batch_encode_plus([doc], 
-                                                             return_tensors=&#39;pt&#39;, truncation=True,
-                                                             max_length=1024)[&#39;input_ids&#39;].to(self.torch_device)
-        summary_ids = self.model.generate(answers_input_ids,
-                                          num_beams=4,
-                                          length_penalty=2.0,
-                                          max_length=142,
-                                          min_length=56,
-                                          no_repeat_ngram_size=3)
 
-        exec_sum = self.tokenizer.decode(summary_ids.squeeze(), skip_special_tokens=True)
+    with torch.no_grad():
+        answers_input_ids = self.tokenizer.batch_encode_plus(
+            [doc], return_tensors=&#34;pt&#34;, truncation=True, max_length=1024
+        )[&#34;input_ids&#34;].to(self.torch_device)
+        summary_ids = self.model.generate(
+            answers_input_ids,
+            num_beams=num_beams,
+            length_penalty=length_penalty,
+            max_length=max_length,
+            min_length=min_length,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+            **kwargs,
+        )
+
+        exec_sum = self.tokenizer.decode(
+            summary_ids.squeeze(), skip_special_tokens=True
+        )
     return exec_sum</code></pre>
 </details>
 </dd>
@@ -222,6 +511,12 @@ Returns:
 <li><h3><a href="#header-classes">Classes</a></h3>
 <ul>
 <li>
+<h4><code><a title="ktrain.text.summarization.core.LexRankSummarizer" href="#ktrain.text.summarization.core.LexRankSummarizer">LexRankSummarizer</a></code></h4>
+<ul class="">
+<li><code><a title="ktrain.text.summarization.core.LexRankSummarizer.summarize" href="#ktrain.text.summarization.core.LexRankSummarizer.summarize">summarize</a></code></li>
+</ul>
+</li>
+<li>
 <h4><code><a title="ktrain.text.summarization.core.TransformerSummarizer" href="#ktrain.text.summarization.core.TransformerSummarizer">TransformerSummarizer</a></code></h4>
 <ul class="">
 <li><code><a title="ktrain.text.summarization.core.TransformerSummarizer.summarize" href="#ktrain.text.summarization.core.TransformerSummarizer.summarize">summarize</a></code></li>
@@ -233,7 +528,7 @@ Returns:
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.9.2</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
 </footer>
 </body>
 </html>

@@ -1,1 +1,1 @@
-from .core import SimpleQA, AnswerExtractor, QA
+from .extractive_qa import ExtractiveQABase, AnswerExtractor, SimpleQA

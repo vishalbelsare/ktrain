@@ -11,7 +11,8 @@ This directory contains various example notebooks using *ktrain*.  The directory
   - [document recommender system](#docrec):  given text from a sample document, recommend documents that are semantically similar to it from a larger corpus 
   - [Shallow NLP](#shallownlp):  a small collection of miscellaneous text utilities amenable to being used on machines with only a CPU available (no GPU required)
   - [Text Summarization](#bart):  an example of text summarization using a pretrained BART model
-  - [Open-Domain Question-Answering](#textqa):  ask questions to a large text corpus and receive exact candidate answers
+  - [Extractive, End-to-End Question-Answering](#textqa):  ask questions to a large text corpus and extract exact candidate answers
+  - [Generative, End-to-End Question-Answering](#genqa):  ask questions to a large text corpus and generate answers with citations to documents containing the answers
   - [Zero-Shot Learning](#zsl):  classify documents by user-supplied topics **without** any training examples
   - [Language Translation](#translation): an example of language translation using pretrained MarianMT models
   - [Text Extraction](#textextraction): extract text from PDFs, Word documents, etc.
@@ -19,6 +20,8 @@ This directory contains various example notebooks using *ktrain*.  The directory
   - [Universal Information Extraction](#extraction): an example of using a Question-Answering model for information extraction
   - [Keyphrase Extraction](#kwextraction): an example of keyphrase extraction in **ktrain**
   - [Indonesian Text Examples](#indonesian):  examples such as zero-Shot text classification and question-answering on Indonesian text by [Sandy Khosasi](https://github.com/ilos-vigil)
+  - [Sentiment Analysis Examples](#sentiment): simple-to-use sentiment analysis
+  - [Generative AI Examples](#generativeai):  provide instructions to a language model running on your own machine to solve various tasks
 - `vision`:  
   - [image classification](#imageclass):  models for image datasetsimage classification examples using various models and datasets
   - [image regression](#imageregression): example of predicting numerical values purely from images/photos
@@ -146,7 +149,8 @@ The objective of the CoNLL2003 task is to classify sequences of words as belongi
 - [20newsgroups-recommendation_engine.ipynb](https://github.com/amaiya/ktrain/tree/master/examples/text):  given text from a sample document, recommend documents that are semantically similar to it from a larger corpus
 
 ### <a name="bart"></a>Text Summarization with pretrained BART: [text_summarization_with_bart.ipynb](https://github.com/amaiya/ktrain/tree/master/examples/text)
-### <a name="textqa"></a>Open-Domain Question-Answering: [question_answering_with_bert.ipynb](https://github.com/amaiya/ktrain/tree/master/examples/text)
+### <a name="textqa"></a>Question-Answering with BERT: [question_answering_with_bert.ipynb](https://github.com/amaiya/ktrain/tree/master/examples/text)
+### <a name="genqa"></a>Question-Answering with GPT models: [generative question-answering with OnPrem.LLM](https://amaiya.github.io/onprem/examples_rag.html)
 ### <a name="zsl"></a>Zero-Shot Learning: [zero_shot_learning_with_nli.ipynb](https://github.com/amaiya/ktrain/tree/master/examples/text)
 ### <a name="translation"></a>Language Translation: [language_translation_example.ipynb](https://github.com/amaiya/ktrain/tree/master/examples/text)
 ### <a name="textextraction"></a>Text Extraction: [text_extraction_example.ipynb](https://github.com/amaiya/ktrain/tree/master/examples/text)
@@ -154,6 +158,8 @@ The objective of the CoNLL2003 task is to classify sequences of words as belongi
 ### <a name="extraction"></a>Universal Information Extraction: [qa_information_extraction.ipynb](https://github.com/amaiya/ktrain/tree/master/examples/text)
 ### <a name="kwextraction"></a>Keyphrase Extraction: [keyword_extraction_example.ipynb](https://github.com/amaiya/ktrain/tree/master/examples/text)
 ### <a name="indonesian"></a> [Indonesian NLP examples by Sandy Khosasi](https://github.com/ilos-vigil/ktrain-assessment-study) including Indonesian question-answering, emotion recognition, and document similarity
+### <a name="sentiment"></a> Sentiment Analysis:  [sentiment_analysis_example.ipynb](https://github.com/amaiya/ktrain/tree/master/examples/text/)
+### <a name="generativeai"></a> ChatGPT-like Generative AI on Your Own Machine:  [generative_ai_example.ipynb](https://github.com/amaiya/ktrain/tree/master/examples/text/generative_ai_example.ipynb)
 
 
 ## Vision Data

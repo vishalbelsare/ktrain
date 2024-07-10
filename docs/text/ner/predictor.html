@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.9.2" />
+<meta name="generator" content="pdoc 0.10.0" />
 <title>ktrain.text.ner.predictor API documentation</title>
 <meta name="description" content="" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
@@ -26,11 +26,12 @@
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">from ...imports import *
+<pre><code class="python">from ... import utils as U
+from ...imports import *
 from ...predictor import Predictor
-from .preprocessor import NERPreprocessor
-from ... import utils as U
 from .. import textutils as TU
+from .preprocessor import NERPreprocessor
+
 
 class NERPredictor(Predictor):
     &#34;&#34;&#34;
@@ -38,23 +39,27 @@ class NERPredictor(Predictor):
     &#34;&#34;&#34;
 
     def __init__(self, model, preproc, batch_size=U.DEFAULT_BS):
-
         if not isinstance(model, keras.Model):
-            raise ValueError(&#39;model must be of instance keras.Model&#39;)
+            raise ValueError(&#34;model must be of instance keras.Model&#34;)
         if not isinstance(preproc, NERPreprocessor):
-        #if type(preproc).__name__ != &#39;NERPreprocessor&#39;:
-            raise ValueError(&#39;preproc must be a NERPreprocessor object&#39;)
+            # if type(preproc).__name__ != &#39;NERPreprocessor&#39;:
+            raise ValueError(&#34;preproc must be a NERPreprocessor object&#34;)
         self.model = model
         self.preproc = preproc
         self.c = self.preproc.get_classes()
-        self.batch_size = batch_size 
-
+        self.batch_size = batch_size
 
     def get_classes(self):
         return self.c
 
-
-    def predict(self, sentences, return_proba=False, merge_tokens=False, custom_tokenizer=None, return_offsets=False):
+    def predict(
+        self,
+        sentences,
+        return_proba=False,
+        merge_tokens=False,
+        custom_tokenizer=None,
+        return_offsets=False,
+    ):
         &#34;&#34;&#34;
         ```
         Makes predictions for a string-representation of a sentence
@@ -77,20 +82,27 @@ class NERPredictor(Predictor):
         &#34;&#34;&#34;
         is_array = not isinstance(sentences, str)
         if not isinstance(sentences, (str, list)):
-            raise ValueError(&#39;Param sentence must be either string-representation of a sentence or a list of sentence strings.&#39;)
-        if return_proba and merge_tokens:
-            raise ValueError(&#39;return_proba and merge_tokens are mutually exclusive with one another.&#39;)
-        if isinstance(sentences, str): sentences = [sentences]
+            raise ValueError(
+                &#34;Param sentence must be either string-representation of a sentence or a list of sentence strings.&#34;
+            )
+        # if return_proba and merge_tokens:
+        #     raise ValueError(
+        #         &#34;return_proba and merge_tokens are mutually exclusive with one another.&#34;
+        #     )
+        if isinstance(sentences, str):
+            sentences = [sentences]
         lang = TU.detect_lang(sentences)
 
         # batchify
-        num_chunks = math.ceil(len(sentences)/self.batch_size)
+        num_chunks = math.ceil(len(sentences) / self.batch_size)
         batches = U.list2chunks(sentences, n=num_chunks)
 
         # process batches
         results = []
         for batch in batches:
-            nerseq = self.preproc.preprocess(batch, lang=lang, custom_tokenizer=custom_tokenizer)
+            nerseq = self.preproc.preprocess(
+                batch, lang=lang, custom_tokenizer=custom_tokenizer
+            )
             if not nerseq.prepare_called:
                 nerseq.prepare()
             nerseq.batch_size = len(batch)
@@ -103,38 +115,57 @@ class NERPredictor(Predictor):
                 try:
                     probs = np.max(y_pred, axis=2)
                 except:
-                    probs = y_pred[0].numpy().tolist() # TODO: remove after confirmation (#316)
+                    probs = (
+                        y_pred[0].numpy().tolist()
+                    )  # TODO: remove after confirmation (#316)
                 for i, (x, y, prob) in enumerate(zip(nerseq.x, y_labels, probs)):
                     if return_offsets:
-                        offsets = TU.extract_offsets(sentences[i], tokens=[entry[0] for entry in x])
-                        result = [(x[i], y[i], prob[i], (offsets[i][&#39;start&#39;], offsets[i][&#39;end&#39;])) for i in range(len(x))]
+                        offsets = TU.extract_offsets(
+                            sentences[i], tokens=[entry[0] for entry in x]
+                        )
+                        result = [
+                            (
+                                x[i],
+                                y[i],
+                                prob[i],
+                                (offsets[i][&#34;start&#34;], offsets[i][&#34;end&#34;]),
+                            )
+                            for i in range(len(x))
+                        ]
                     else:
                         result = [(x[i], y[i], prob[i]) for i in range(len(x))]
+                    if merge_tokens:
+                        result = self.merge_tokens(result, lang, True)
                     results.append(result)
             else:
-                for i, (x,y) in enumerate(zip(nerseq.x, y_labels)):
+                for i, (x, y) in enumerate(zip(nerseq.x, y_labels)):
                     if return_offsets:
-                        offsets = TU.extract_offsets(sentences[i], tokens=[entry[0] for entry in x])
-                        result =  list(zip(x,y, [(o[&#39;start&#39;], o[&#39;end&#39;]) for o in offsets]))
+                        offsets = TU.extract_offsets(
+                            sentences[i], tokens=[entry[0] for entry in x]
+                        )
+                        result = list(
+                            zip(x, y, [(o[&#34;start&#34;], o[&#34;end&#34;]) for o in offsets])
+                        )
                     else:
-                        result =  list(zip(x,y))
+                        result = list(zip(x, y))
                     if merge_tokens:
-                        result = self.merge_tokens(result, lang)
+                        result = self.merge_tokens(result, lang, False)
                     results.append(result)
-        if not is_array: results = results[0]
+        if not is_array:
+            results = results[0]
         return results
 
-
-
-    def merge_tokens(self, annotated_sentence, lang):
-
-        if TU.is_chinese(lang, strict=False): # strict=False: workaround for langdetect bug on short chinese texts
-            sep = &#39;&#39;
+    def merge_tokens(self, annotated_sentence, lang, return_proba):
+        if TU.is_chinese(
+            lang, strict=False
+        ):  # strict=False: workaround for langdetect bug on short chinese texts
+            sep = &#34;&#34;
         else:
-            sep = &#39; &#39;
+            sep = &#34; &#34;
 
         current_token = &#34;&#34;
         current_tag = &#34;&#34;
+        prob_list = []
         entities = []
         start = None
         last_end = None
@@ -142,17 +173,26 @@ class NERPredictor(Predictor):
         for tup in annotated_sentence:
             token = tup[0]
             entity = tup[1]
-            offsets = tup[2] if len(tup)&gt;2 else None
-            tag = entity.split(&#39;-&#39;)[1] if &#39;-&#39; in entity else None
-            prefix = entity.split(&#39;-&#39;)[0] if &#39;-&#39; in entity else None
+            if return_proba:
+                prob = tup[2]
+                offsets = tup[3] if len(tup) &gt; 3 else None
+            else:
+                offsets = tup[2] if len(tup) &gt; 2 else None
+            tag = entity.split(&#34;-&#34;)[1] if &#34;-&#34; in entity else None
+            prefix = entity.split(&#34;-&#34;)[0] if &#34;-&#34; in entity else None
             # not within entity
             if tag is None and not current_token:
                 continue
             # beginning of entity
-            #elif tag and prefix==&#39;B&#39;:
-            elif tag and (prefix==&#39;B&#39; or prefix==&#39;I&#39; and not current_token):
-                if current_token: # consecutive entities
-                    entities.append(self._build_merge_tuple(current_token, current_tag, start, last_end))
+            # elif tag and prefix==&#39;B&#39;:
+            elif tag and (prefix == &#34;B&#34; or prefix == &#34;I&#34; and not current_token):
+                if current_token:  # consecutive entities
+                    entities.append(
+                        self._build_merge_tuple(
+                            current_token, current_tag, start, last_end, prob_list
+                        )
+                    )
+                    prob_list = []
                     current_token = &#34;&#34;
                     current_tag = None
                     start, end = None, None
@@ -160,31 +200,48 @@ class NERPredictor(Predictor):
                 current_tag = tag
                 start = offsets[0] if offsets else None
                 last_end = offsets[1] if offsets else None
+                if return_proba:
+                    prob_list.append(prob)
             # end of entity
             elif tag is None and current_token:
-                entities.append(self._build_merge_tuple(current_token, current_tag, start, last_end))
+                entities.append(
+                    self._build_merge_tuple(
+                        current_token, current_tag, start, last_end, prob_list
+                    )
+                )
+                prob_list = []
                 current_token = &#34;&#34;
                 current_tag = None
                 continue
             # within entity
-            elif tag and current_token:  #  prefix I
+            elif tag and current_token:  # prefix I
                 current_token = current_token + sep + token
                 current_tag = tag
                 last_end = offsets[1] if offsets else None
+                if return_proba:
+                    prob_list.append(prob)
         if current_token and current_tag:
-            entities.append(self._build_merge_tuple(current_token, current_tag, start, last_end)) 
+            entities.append(
+                self._build_merge_tuple(
+                    current_token, current_tag, start, last_end, prob_list
+                )
+            )
         return entities
 
-    def _build_merge_tuple(self, current_token, current_tag, start=None, end=None):
+    def _build_merge_tuple(
+        self, current_token, current_tag, start=None, end=None, prob_list=[]
+    ):
         entry = [current_token, current_tag]
-        if start is not None and end is not None: entry.append((start, end))
+        if start is not None and end is not None:
+            entry.append((start, end))
+        if prob_list:
+            entry.append(np.mean(prob_list))
         return tuple(entry)
 
     def _save_preproc(self, fpath):
-
         # ensure transformers embedding model is saved in a subdirectory
         p = self.preproc.p
-        hf_dir = os.path.join(fpath, &#39;hf&#39;)
+        hf_dir = os.path.join(fpath, &#34;hf&#34;)
         if p.te is not None:
             os.makedirs(hf_dir, exist_ok=True)
             p.te.model.save_pretrained(hf_dir)
@@ -193,7 +250,7 @@ class NERPredictor(Predictor):
             p.te_model = hf_dir
 
         # save preproc
-        with open(os.path.join(fpath, U.PREPROC_NAME), &#39;wb&#39;) as f:
+        with open(os.path.join(fpath, U.PREPROC_NAME), &#34;wb&#34;) as f:
             pickle.dump(self.preproc, f)
         return</code></pre>
 </details>
@@ -224,23 +281,27 @@ classes for string-representation of sentence</p></div>
     &#34;&#34;&#34;
 
     def __init__(self, model, preproc, batch_size=U.DEFAULT_BS):
-
         if not isinstance(model, keras.Model):
-            raise ValueError(&#39;model must be of instance keras.Model&#39;)
+            raise ValueError(&#34;model must be of instance keras.Model&#34;)
         if not isinstance(preproc, NERPreprocessor):
-        #if type(preproc).__name__ != &#39;NERPreprocessor&#39;:
-            raise ValueError(&#39;preproc must be a NERPreprocessor object&#39;)
+            # if type(preproc).__name__ != &#39;NERPreprocessor&#39;:
+            raise ValueError(&#34;preproc must be a NERPreprocessor object&#34;)
         self.model = model
         self.preproc = preproc
         self.c = self.preproc.get_classes()
-        self.batch_size = batch_size 
-
+        self.batch_size = batch_size
 
     def get_classes(self):
         return self.c
 
-
-    def predict(self, sentences, return_proba=False, merge_tokens=False, custom_tokenizer=None, return_offsets=False):
+    def predict(
+        self,
+        sentences,
+        return_proba=False,
+        merge_tokens=False,
+        custom_tokenizer=None,
+        return_offsets=False,
+    ):
         &#34;&#34;&#34;
         ```
         Makes predictions for a string-representation of a sentence
@@ -263,20 +324,27 @@ classes for string-representation of sentence</p></div>
         &#34;&#34;&#34;
         is_array = not isinstance(sentences, str)
         if not isinstance(sentences, (str, list)):
-            raise ValueError(&#39;Param sentence must be either string-representation of a sentence or a list of sentence strings.&#39;)
-        if return_proba and merge_tokens:
-            raise ValueError(&#39;return_proba and merge_tokens are mutually exclusive with one another.&#39;)
-        if isinstance(sentences, str): sentences = [sentences]
+            raise ValueError(
+                &#34;Param sentence must be either string-representation of a sentence or a list of sentence strings.&#34;
+            )
+        # if return_proba and merge_tokens:
+        #     raise ValueError(
+        #         &#34;return_proba and merge_tokens are mutually exclusive with one another.&#34;
+        #     )
+        if isinstance(sentences, str):
+            sentences = [sentences]
         lang = TU.detect_lang(sentences)
 
         # batchify
-        num_chunks = math.ceil(len(sentences)/self.batch_size)
+        num_chunks = math.ceil(len(sentences) / self.batch_size)
         batches = U.list2chunks(sentences, n=num_chunks)
 
         # process batches
         results = []
         for batch in batches:
-            nerseq = self.preproc.preprocess(batch, lang=lang, custom_tokenizer=custom_tokenizer)
+            nerseq = self.preproc.preprocess(
+                batch, lang=lang, custom_tokenizer=custom_tokenizer
+            )
             if not nerseq.prepare_called:
                 nerseq.prepare()
             nerseq.batch_size = len(batch)
@@ -289,38 +357,57 @@ classes for string-representation of sentence</p></div>
                 try:
                     probs = np.max(y_pred, axis=2)
                 except:
-                    probs = y_pred[0].numpy().tolist() # TODO: remove after confirmation (#316)
+                    probs = (
+                        y_pred[0].numpy().tolist()
+                    )  # TODO: remove after confirmation (#316)
                 for i, (x, y, prob) in enumerate(zip(nerseq.x, y_labels, probs)):
                     if return_offsets:
-                        offsets = TU.extract_offsets(sentences[i], tokens=[entry[0] for entry in x])
-                        result = [(x[i], y[i], prob[i], (offsets[i][&#39;start&#39;], offsets[i][&#39;end&#39;])) for i in range(len(x))]
+                        offsets = TU.extract_offsets(
+                            sentences[i], tokens=[entry[0] for entry in x]
+                        )
+                        result = [
+                            (
+                                x[i],
+                                y[i],
+                                prob[i],
+                                (offsets[i][&#34;start&#34;], offsets[i][&#34;end&#34;]),
+                            )
+                            for i in range(len(x))
+                        ]
                     else:
                         result = [(x[i], y[i], prob[i]) for i in range(len(x))]
+                    if merge_tokens:
+                        result = self.merge_tokens(result, lang, True)
                     results.append(result)
             else:
-                for i, (x,y) in enumerate(zip(nerseq.x, y_labels)):
+                for i, (x, y) in enumerate(zip(nerseq.x, y_labels)):
                     if return_offsets:
-                        offsets = TU.extract_offsets(sentences[i], tokens=[entry[0] for entry in x])
-                        result =  list(zip(x,y, [(o[&#39;start&#39;], o[&#39;end&#39;]) for o in offsets]))
+                        offsets = TU.extract_offsets(
+                            sentences[i], tokens=[entry[0] for entry in x]
+                        )
+                        result = list(
+                            zip(x, y, [(o[&#34;start&#34;], o[&#34;end&#34;]) for o in offsets])
+                        )
                     else:
-                        result =  list(zip(x,y))
+                        result = list(zip(x, y))
                     if merge_tokens:
-                        result = self.merge_tokens(result, lang)
+                        result = self.merge_tokens(result, lang, False)
                     results.append(result)
-        if not is_array: results = results[0]
+        if not is_array:
+            results = results[0]
         return results
 
-
-
-    def merge_tokens(self, annotated_sentence, lang):
-
-        if TU.is_chinese(lang, strict=False): # strict=False: workaround for langdetect bug on short chinese texts
-            sep = &#39;&#39;
+    def merge_tokens(self, annotated_sentence, lang, return_proba):
+        if TU.is_chinese(
+            lang, strict=False
+        ):  # strict=False: workaround for langdetect bug on short chinese texts
+            sep = &#34;&#34;
         else:
-            sep = &#39; &#39;
+            sep = &#34; &#34;
 
         current_token = &#34;&#34;
         current_tag = &#34;&#34;
+        prob_list = []
         entities = []
         start = None
         last_end = None
@@ -328,17 +415,26 @@ classes for string-representation of sentence</p></div>
         for tup in annotated_sentence:
             token = tup[0]
             entity = tup[1]
-            offsets = tup[2] if len(tup)&gt;2 else None
-            tag = entity.split(&#39;-&#39;)[1] if &#39;-&#39; in entity else None
-            prefix = entity.split(&#39;-&#39;)[0] if &#39;-&#39; in entity else None
+            if return_proba:
+                prob = tup[2]
+                offsets = tup[3] if len(tup) &gt; 3 else None
+            else:
+                offsets = tup[2] if len(tup) &gt; 2 else None
+            tag = entity.split(&#34;-&#34;)[1] if &#34;-&#34; in entity else None
+            prefix = entity.split(&#34;-&#34;)[0] if &#34;-&#34; in entity else None
             # not within entity
             if tag is None and not current_token:
                 continue
             # beginning of entity
-            #elif tag and prefix==&#39;B&#39;:
-            elif tag and (prefix==&#39;B&#39; or prefix==&#39;I&#39; and not current_token):
-                if current_token: # consecutive entities
-                    entities.append(self._build_merge_tuple(current_token, current_tag, start, last_end))
+            # elif tag and prefix==&#39;B&#39;:
+            elif tag and (prefix == &#34;B&#34; or prefix == &#34;I&#34; and not current_token):
+                if current_token:  # consecutive entities
+                    entities.append(
+                        self._build_merge_tuple(
+                            current_token, current_tag, start, last_end, prob_list
+                        )
+                    )
+                    prob_list = []
                     current_token = &#34;&#34;
                     current_tag = None
                     start, end = None, None
@@ -346,31 +442,48 @@ classes for string-representation of sentence</p></div>
                 current_tag = tag
                 start = offsets[0] if offsets else None
                 last_end = offsets[1] if offsets else None
+                if return_proba:
+                    prob_list.append(prob)
             # end of entity
             elif tag is None and current_token:
-                entities.append(self._build_merge_tuple(current_token, current_tag, start, last_end))
+                entities.append(
+                    self._build_merge_tuple(
+                        current_token, current_tag, start, last_end, prob_list
+                    )
+                )
+                prob_list = []
                 current_token = &#34;&#34;
                 current_tag = None
                 continue
             # within entity
-            elif tag and current_token:  #  prefix I
+            elif tag and current_token:  # prefix I
                 current_token = current_token + sep + token
                 current_tag = tag
                 last_end = offsets[1] if offsets else None
+                if return_proba:
+                    prob_list.append(prob)
         if current_token and current_tag:
-            entities.append(self._build_merge_tuple(current_token, current_tag, start, last_end)) 
+            entities.append(
+                self._build_merge_tuple(
+                    current_token, current_tag, start, last_end, prob_list
+                )
+            )
         return entities
 
-    def _build_merge_tuple(self, current_token, current_tag, start=None, end=None):
+    def _build_merge_tuple(
+        self, current_token, current_tag, start=None, end=None, prob_list=[]
+    ):
         entry = [current_token, current_tag]
-        if start is not None and end is not None: entry.append((start, end))
+        if start is not None and end is not None:
+            entry.append((start, end))
+        if prob_list:
+            entry.append(np.mean(prob_list))
         return tuple(entry)
 
     def _save_preproc(self, fpath):
-
         # ensure transformers embedding model is saved in a subdirectory
         p = self.preproc.p
-        hf_dir = os.path.join(fpath, &#39;hf&#39;)
+        hf_dir = os.path.join(fpath, &#34;hf&#34;)
         if p.te is not None:
             os.makedirs(hf_dir, exist_ok=True)
             p.te.model.save_pretrained(hf_dir)
@@ -379,7 +492,7 @@ classes for string-representation of sentence</p></div>
             p.te_model = hf_dir
 
         # save preproc
-        with open(os.path.join(fpath, U.PREPROC_NAME), &#39;wb&#39;) as f:
+        with open(os.path.join(fpath, U.PREPROC_NAME), &#34;wb&#34;) as f:
             pickle.dump(self.preproc, f)
         return</code></pre>
 </details>
@@ -404,7 +517,7 @@ classes for string-representation of sentence</p></div>
 </details>
 </dd>
 <dt id="ktrain.text.ner.predictor.NERPredictor.merge_tokens"><code class="name flex">
-<span>def <span class="ident">merge_tokens</span></span>(<span>self, annotated_sentence, lang)</span>
+<span>def <span class="ident">merge_tokens</span></span>(<span>self, annotated_sentence, lang, return_proba)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -412,15 +525,17 @@ classes for string-representation of sentence</p></div>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def merge_tokens(self, annotated_sentence, lang):
-
-    if TU.is_chinese(lang, strict=False): # strict=False: workaround for langdetect bug on short chinese texts
-        sep = &#39;&#39;
+<pre><code class="python">def merge_tokens(self, annotated_sentence, lang, return_proba):
+    if TU.is_chinese(
+        lang, strict=False
+    ):  # strict=False: workaround for langdetect bug on short chinese texts
+        sep = &#34;&#34;
     else:
-        sep = &#39; &#39;
+        sep = &#34; &#34;
 
     current_token = &#34;&#34;
     current_tag = &#34;&#34;
+    prob_list = []
     entities = []
     start = None
     last_end = None
@@ -428,17 +543,26 @@ classes for string-representation of sentence</p></div>
     for tup in annotated_sentence:
         token = tup[0]
         entity = tup[1]
-        offsets = tup[2] if len(tup)&gt;2 else None
-        tag = entity.split(&#39;-&#39;)[1] if &#39;-&#39; in entity else None
-        prefix = entity.split(&#39;-&#39;)[0] if &#39;-&#39; in entity else None
+        if return_proba:
+            prob = tup[2]
+            offsets = tup[3] if len(tup) &gt; 3 else None
+        else:
+            offsets = tup[2] if len(tup) &gt; 2 else None
+        tag = entity.split(&#34;-&#34;)[1] if &#34;-&#34; in entity else None
+        prefix = entity.split(&#34;-&#34;)[0] if &#34;-&#34; in entity else None
         # not within entity
         if tag is None and not current_token:
             continue
         # beginning of entity
-        #elif tag and prefix==&#39;B&#39;:
-        elif tag and (prefix==&#39;B&#39; or prefix==&#39;I&#39; and not current_token):
-            if current_token: # consecutive entities
-                entities.append(self._build_merge_tuple(current_token, current_tag, start, last_end))
+        # elif tag and prefix==&#39;B&#39;:
+        elif tag and (prefix == &#34;B&#34; or prefix == &#34;I&#34; and not current_token):
+            if current_token:  # consecutive entities
+                entities.append(
+                    self._build_merge_tuple(
+                        current_token, current_tag, start, last_end, prob_list
+                    )
+                )
+                prob_list = []
                 current_token = &#34;&#34;
                 current_tag = None
                 start, end = None, None
@@ -446,19 +570,32 @@ classes for string-representation of sentence</p></div>
             current_tag = tag
             start = offsets[0] if offsets else None
             last_end = offsets[1] if offsets else None
+            if return_proba:
+                prob_list.append(prob)
         # end of entity
         elif tag is None and current_token:
-            entities.append(self._build_merge_tuple(current_token, current_tag, start, last_end))
+            entities.append(
+                self._build_merge_tuple(
+                    current_token, current_tag, start, last_end, prob_list
+                )
+            )
+            prob_list = []
             current_token = &#34;&#34;
             current_tag = None
             continue
         # within entity
-        elif tag and current_token:  #  prefix I
+        elif tag and current_token:  # prefix I
             current_token = current_token + sep + token
             current_tag = tag
             last_end = offsets[1] if offsets else None
+            if return_proba:
+                prob_list.append(prob)
     if current_token and current_tag:
-        entities.append(self._build_merge_tuple(current_token, current_tag, start, last_end)) 
+        entities.append(
+            self._build_merge_tuple(
+                current_token, current_tag, start, last_end, prob_list
+            )
+        )
     return entities</code></pre>
 </details>
 </dd>
@@ -487,7 +624,14 @@ Returns:
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def predict(self, sentences, return_proba=False, merge_tokens=False, custom_tokenizer=None, return_offsets=False):
+<pre><code class="python">def predict(
+    self,
+    sentences,
+    return_proba=False,
+    merge_tokens=False,
+    custom_tokenizer=None,
+    return_offsets=False,
+):
     &#34;&#34;&#34;
     ```
     Makes predictions for a string-representation of a sentence
@@ -510,20 +654,27 @@ Returns:
     &#34;&#34;&#34;
     is_array = not isinstance(sentences, str)
     if not isinstance(sentences, (str, list)):
-        raise ValueError(&#39;Param sentence must be either string-representation of a sentence or a list of sentence strings.&#39;)
-    if return_proba and merge_tokens:
-        raise ValueError(&#39;return_proba and merge_tokens are mutually exclusive with one another.&#39;)
-    if isinstance(sentences, str): sentences = [sentences]
+        raise ValueError(
+            &#34;Param sentence must be either string-representation of a sentence or a list of sentence strings.&#34;
+        )
+    # if return_proba and merge_tokens:
+    #     raise ValueError(
+    #         &#34;return_proba and merge_tokens are mutually exclusive with one another.&#34;
+    #     )
+    if isinstance(sentences, str):
+        sentences = [sentences]
     lang = TU.detect_lang(sentences)
 
     # batchify
-    num_chunks = math.ceil(len(sentences)/self.batch_size)
+    num_chunks = math.ceil(len(sentences) / self.batch_size)
     batches = U.list2chunks(sentences, n=num_chunks)
 
     # process batches
     results = []
     for batch in batches:
-        nerseq = self.preproc.preprocess(batch, lang=lang, custom_tokenizer=custom_tokenizer)
+        nerseq = self.preproc.preprocess(
+            batch, lang=lang, custom_tokenizer=custom_tokenizer
+        )
         if not nerseq.prepare_called:
             nerseq.prepare()
         nerseq.batch_size = len(batch)
@@ -536,25 +687,44 @@ Returns:
             try:
                 probs = np.max(y_pred, axis=2)
             except:
-                probs = y_pred[0].numpy().tolist() # TODO: remove after confirmation (#316)
+                probs = (
+                    y_pred[0].numpy().tolist()
+                )  # TODO: remove after confirmation (#316)
             for i, (x, y, prob) in enumerate(zip(nerseq.x, y_labels, probs)):
                 if return_offsets:
-                    offsets = TU.extract_offsets(sentences[i], tokens=[entry[0] for entry in x])
-                    result = [(x[i], y[i], prob[i], (offsets[i][&#39;start&#39;], offsets[i][&#39;end&#39;])) for i in range(len(x))]
+                    offsets = TU.extract_offsets(
+                        sentences[i], tokens=[entry[0] for entry in x]
+                    )
+                    result = [
+                        (
+                            x[i],
+                            y[i],
+                            prob[i],
+                            (offsets[i][&#34;start&#34;], offsets[i][&#34;end&#34;]),
+                        )
+                        for i in range(len(x))
+                    ]
                 else:
                     result = [(x[i], y[i], prob[i]) for i in range(len(x))]
+                if merge_tokens:
+                    result = self.merge_tokens(result, lang, True)
                 results.append(result)
         else:
-            for i, (x,y) in enumerate(zip(nerseq.x, y_labels)):
+            for i, (x, y) in enumerate(zip(nerseq.x, y_labels)):
                 if return_offsets:
-                    offsets = TU.extract_offsets(sentences[i], tokens=[entry[0] for entry in x])
-                    result =  list(zip(x,y, [(o[&#39;start&#39;], o[&#39;end&#39;]) for o in offsets]))
+                    offsets = TU.extract_offsets(
+                        sentences[i], tokens=[entry[0] for entry in x]
+                    )
+                    result = list(
+                        zip(x, y, [(o[&#34;start&#34;], o[&#34;end&#34;]) for o in offsets])
+                    )
                 else:
-                    result =  list(zip(x,y))
+                    result = list(zip(x, y))
                 if merge_tokens:
-                    result = self.merge_tokens(result, lang)
+                    result = self.merge_tokens(result, lang, False)
                 results.append(result)
-    if not is_array: results = results[0]
+    if not is_array:
+        results = results[0]
     return results</code></pre>
 </details>
 </dd>
@@ -601,7 +771,7 @@ Returns:
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.9.2</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
 </footer>
 </body>
 </html>

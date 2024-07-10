@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.9.2" />
+<meta name="generator" content="pdoc 0.10.0" />
 <title>ktrain.text.predictor API documentation</title>
 <meta name="description" content="" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
@@ -26,10 +26,11 @@
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">from ..imports import *
+<pre><code class="python">from .. import utils as U
+from ..imports import *
 from ..predictor import Predictor
 from .preprocessor import TextPreprocessor, TransformersPreprocessor, detect_text_format
-from .. import utils as U
+
 
 class TextPredictor(Predictor):
     &#34;&#34;&#34;
@@ -39,23 +40,20 @@ class TextPredictor(Predictor):
     &#34;&#34;&#34;
 
     def __init__(self, model, preproc, batch_size=U.DEFAULT_BS):
-
         if not isinstance(model, keras.Model):
-            raise ValueError(&#39;model must be of instance keras.Model&#39;)
+            raise ValueError(&#34;model must be of instance keras.Model&#34;)
         if not isinstance(preproc, TextPreprocessor):
-        #if type(preproc).__name__ != &#39;TextPreprocessor&#39;:
-            raise ValueError(&#39;preproc must be a TextPreprocessor object&#39;)
+            # if type(preproc).__name__ != &#39;TextPreprocessor&#39;:
+            raise ValueError(&#34;preproc must be a TextPreprocessor object&#34;)
         self.model = model
         self.preproc = preproc
         self.c = self.preproc.get_classes()
         self.batch_size = batch_size
 
-
     def get_classes(self):
         return self.c
 
-
-    def predict(self, texts, return_proba=False):
+    def predict(self, texts, return_proba=False, use_tf_dataset=False, verbose=0):
         &#34;&#34;&#34;
         ```
 
@@ -70,30 +68,45 @@ class TextPredictor(Predictor):
                            A single tuple of the form (str, str) is automatically treated as sentence pair classification, so
                            please refrain from using tuples for text classification tasks.
           return_proba(bool): If True, return probabilities instead of predicted class labels
+          use_tf_dataset(bool): If True, wraps dataset in a tf.Dataset when passing input to model.
+
+          verbose(int): verbosity: 0 (silent), 1 (progress bar), 2 (single line)
         ```
         &#34;&#34;&#34;
 
         is_array, is_pair = detect_text_format(texts)
-        if not is_array: texts = [texts]
+        if not is_array:
+            texts = [texts]
 
         classification, multilabel = U.is_classifier(self.model)
 
         # get predictions
         if U.is_huggingface(model=self.model):
             tseq = self.preproc.preprocess_test(texts, verbose=0)
-            tseq.batch_size = self.batch_size
-            tfd = tseq.to_tfdataset(train=False)
-            preds = self.model.predict(tfd)
-            if hasattr(preds, &#39;logits&#39;): # dep_fix: breaking change - also needed for LongFormer
-            #if type(preds).__name__ == &#39;TFSequenceClassifierOutput&#39;: # dep_fix: undocumented breaking change in transformers==4.0.0
+            if use_tf_dataset:
+                tseq.batch_size = self.batch_size
+                tfd = tseq.to_tfdataset(train=False)
+                preds = self.model.predict(tfd, verbose=verbose)
+            else:
+                data = tseq.to_array()
+                preds = self.model.predict(
+                    data, batch_size=self.batch_size, verbose=verbose
+                )
+            if hasattr(
+                preds, &#34;logits&#34;
+            ):  # dep_fix: breaking change - also needed for LongFormer
+                # if type(preds).__name__ == &#39;TFSequenceClassifierOutput&#39;: # dep_fix: undocumented breaking change in transformers==4.0.0
                 # REFERENCE: https://discuss.huggingface.co/t/new-model-output-types/195
                 preds = preds.logits
-            
+
             # dep_fix: transformers in TF 2.2.0 returns a tuple insead of NumPy array for some reason
-            if isinstance(preds, tuple) and len(preds) == 1: preds = preds[0] 
+            if isinstance(preds, tuple) and len(preds) == 1:
+                preds = preds[0]
         else:
             texts = self.preproc.preprocess(texts)
-            preds = self.model.predict(texts, batch_size=self.batch_size)
+            preds = self.model.predict(
+                texts, batch_size=self.batch_size, verbose=verbose
+            )
 
         # process predictions
         if U.is_huggingface(model=self.model):
@@ -104,16 +117,21 @@ class TextPredictor(Predictor):
                 preds = keras.activations.softmax(tf.convert_to_tensor(preds)).numpy()
             else:
                 preds = np.squeeze(preds)
-                if len(preds.shape) == 0: preds = np.expand_dims(preds, -1)
-        result =  preds if return_proba or multilabel or not self.c else [self.c[np.argmax(pred)] for pred in preds] 
+                if len(preds.shape) == 0:
+                    preds = np.expand_dims(preds, -1)
+        result = (
+            preds
+            if return_proba or multilabel or not self.c
+            else [self.c[np.argmax(pred)] for pred in preds]
+        )
         if multilabel and not return_proba:
-            result =  [list(zip(self.c, r)) for r in result]
-        if not is_array: return result[0]
-        else:      return result
+            result = [list(zip(self.c, r)) for r in result]
+        if not is_array:
+            return result[0]
+        else:
+            return result
 
-
-
-    def predict_proba(self, texts):
+    def predict_proba(self, texts, verbose=0):
         &#34;&#34;&#34;
         ```
         Makes predictions for a list of strings where each string is a document
@@ -121,8 +139,7 @@ class TextPredictor(Predictor):
         Returns probabilities of each class.
         ```
         &#34;&#34;&#34;
-        return self.predict(texts, return_proba=True)
-
+        return self.predict(texts, return_proba=True, verbose=verbose)
 
     def explain(self, doc, truncate_len=512, all_targets=False, n_samples=2500):
         &#34;&#34;&#34;
@@ -137,37 +154,40 @@ class TextPredictor(Predictor):
                             Lower this value if explain is taking too long.
         &#34;&#34;&#34;
         is_array, is_pair = detect_text_format(doc)
-        if is_pair: 
-            warnings.warn(&#39;currently_unsupported: explain does not currently support sentence pair classification&#39;)
+        if is_pair:
+            warnings.warn(
+                &#34;currently_unsupported: explain does not currently support sentence pair classification&#34;
+            )
             return
         if not self.c:
-            warnings.warn(&#39;currently_unsupported: explain does not support text regression&#39;)
+            warnings.warn(
+                &#34;currently_unsupported: explain does not support text regression&#34;
+            )
             return
         try:
             import eli5
             from eli5.lime import TextExplainer
         except:
-            msg = &#39;ktrain requires a forked version of eli5 to support tf.keras. &#39;+\
-                  &#39;Install with: pip install https://github.com/amaiya/eli5/archive/refs/heads/tfkeras_0_10_1.zip&#39;
-            warnings.warn(msg)
-            return
-        if not hasattr(eli5, &#39;KTRAIN_ELI5_TAG&#39;) or eli5.KTRAIN_ELI5_TAG != KTRAIN_ELI5_TAG:
-            msg = &#39;ktrain requires a forked version of eli5 to support tf.keras. It is either missing or not up-to-date. &#39;+\
-                  &#39;Uninstall the current version and install/re-install the fork with: pip install https://github.com/amaiya/eli5/archive/refs/heads/tfkeras_0_10_1.zip&#39;
+            msg = (
+                &#34;ktrain requires a forked version of eli5 to support tf.keras. &#34;
+                + &#34;Install with: pip install https://github.com/amaiya/eli5-tf/archive/refs/heads/master.zip&#34;
+            )
             warnings.warn(msg)
             return
 
-        if not isinstance(doc, str): raise TypeError(&#39;text must of type str&#39;)
+        if not isinstance(doc, str):
+            raise TypeError(&#34;text must of type str&#34;)
         prediction = [self.predict(doc)] if not all_targets else None
 
         if self.preproc.is_nospace_lang():
             doc = self.preproc.process_chinese([doc])
             doc = doc[0]
-        doc = &#39; &#39;.join(doc.split()[:truncate_len])
+        doc = &#34; &#34;.join(doc.split()[:truncate_len])
         te = TextExplainer(random_state=42, n_samples=n_samples)
         _ = te.fit(doc, self.predict_proba)
-        return te.show_prediction(target_names=self.preproc.get_classes(), targets=prediction)
-
+        return te.show_prediction(
+            target_names=self.preproc.get_classes(), targets=prediction
+        )
 
     def _save_model(self, fpath):
         if isinstance(self.preproc, TransformersPreprocessor):
@@ -208,23 +228,20 @@ class TextPredictor(Predictor):
     &#34;&#34;&#34;
 
     def __init__(self, model, preproc, batch_size=U.DEFAULT_BS):
-
         if not isinstance(model, keras.Model):
-            raise ValueError(&#39;model must be of instance keras.Model&#39;)
+            raise ValueError(&#34;model must be of instance keras.Model&#34;)
         if not isinstance(preproc, TextPreprocessor):
-        #if type(preproc).__name__ != &#39;TextPreprocessor&#39;:
-            raise ValueError(&#39;preproc must be a TextPreprocessor object&#39;)
+            # if type(preproc).__name__ != &#39;TextPreprocessor&#39;:
+            raise ValueError(&#34;preproc must be a TextPreprocessor object&#34;)
         self.model = model
         self.preproc = preproc
         self.c = self.preproc.get_classes()
         self.batch_size = batch_size
 
-
     def get_classes(self):
         return self.c
 
-
-    def predict(self, texts, return_proba=False):
+    def predict(self, texts, return_proba=False, use_tf_dataset=False, verbose=0):
         &#34;&#34;&#34;
         ```
 
@@ -239,30 +256,45 @@ class TextPredictor(Predictor):
                            A single tuple of the form (str, str) is automatically treated as sentence pair classification, so
                            please refrain from using tuples for text classification tasks.
           return_proba(bool): If True, return probabilities instead of predicted class labels
+          use_tf_dataset(bool): If True, wraps dataset in a tf.Dataset when passing input to model.
+
+          verbose(int): verbosity: 0 (silent), 1 (progress bar), 2 (single line)
         ```
         &#34;&#34;&#34;
 
         is_array, is_pair = detect_text_format(texts)
-        if not is_array: texts = [texts]
+        if not is_array:
+            texts = [texts]
 
         classification, multilabel = U.is_classifier(self.model)
 
         # get predictions
         if U.is_huggingface(model=self.model):
             tseq = self.preproc.preprocess_test(texts, verbose=0)
-            tseq.batch_size = self.batch_size
-            tfd = tseq.to_tfdataset(train=False)
-            preds = self.model.predict(tfd)
-            if hasattr(preds, &#39;logits&#39;): # dep_fix: breaking change - also needed for LongFormer
-            #if type(preds).__name__ == &#39;TFSequenceClassifierOutput&#39;: # dep_fix: undocumented breaking change in transformers==4.0.0
+            if use_tf_dataset:
+                tseq.batch_size = self.batch_size
+                tfd = tseq.to_tfdataset(train=False)
+                preds = self.model.predict(tfd, verbose=verbose)
+            else:
+                data = tseq.to_array()
+                preds = self.model.predict(
+                    data, batch_size=self.batch_size, verbose=verbose
+                )
+            if hasattr(
+                preds, &#34;logits&#34;
+            ):  # dep_fix: breaking change - also needed for LongFormer
+                # if type(preds).__name__ == &#39;TFSequenceClassifierOutput&#39;: # dep_fix: undocumented breaking change in transformers==4.0.0
                 # REFERENCE: https://discuss.huggingface.co/t/new-model-output-types/195
                 preds = preds.logits
-            
+
             # dep_fix: transformers in TF 2.2.0 returns a tuple insead of NumPy array for some reason
-            if isinstance(preds, tuple) and len(preds) == 1: preds = preds[0] 
+            if isinstance(preds, tuple) and len(preds) == 1:
+                preds = preds[0]
         else:
             texts = self.preproc.preprocess(texts)
-            preds = self.model.predict(texts, batch_size=self.batch_size)
+            preds = self.model.predict(
+                texts, batch_size=self.batch_size, verbose=verbose
+            )
 
         # process predictions
         if U.is_huggingface(model=self.model):
@@ -273,16 +305,21 @@ class TextPredictor(Predictor):
                 preds = keras.activations.softmax(tf.convert_to_tensor(preds)).numpy()
             else:
                 preds = np.squeeze(preds)
-                if len(preds.shape) == 0: preds = np.expand_dims(preds, -1)
-        result =  preds if return_proba or multilabel or not self.c else [self.c[np.argmax(pred)] for pred in preds] 
+                if len(preds.shape) == 0:
+                    preds = np.expand_dims(preds, -1)
+        result = (
+            preds
+            if return_proba or multilabel or not self.c
+            else [self.c[np.argmax(pred)] for pred in preds]
+        )
         if multilabel and not return_proba:
-            result =  [list(zip(self.c, r)) for r in result]
-        if not is_array: return result[0]
-        else:      return result
+            result = [list(zip(self.c, r)) for r in result]
+        if not is_array:
+            return result[0]
+        else:
+            return result
 
-
-
-    def predict_proba(self, texts):
+    def predict_proba(self, texts, verbose=0):
         &#34;&#34;&#34;
         ```
         Makes predictions for a list of strings where each string is a document
@@ -290,8 +327,7 @@ class TextPredictor(Predictor):
         Returns probabilities of each class.
         ```
         &#34;&#34;&#34;
-        return self.predict(texts, return_proba=True)
-
+        return self.predict(texts, return_proba=True, verbose=verbose)
 
     def explain(self, doc, truncate_len=512, all_targets=False, n_samples=2500):
         &#34;&#34;&#34;
@@ -306,37 +342,40 @@ class TextPredictor(Predictor):
                             Lower this value if explain is taking too long.
         &#34;&#34;&#34;
         is_array, is_pair = detect_text_format(doc)
-        if is_pair: 
-            warnings.warn(&#39;currently_unsupported: explain does not currently support sentence pair classification&#39;)
+        if is_pair:
+            warnings.warn(
+                &#34;currently_unsupported: explain does not currently support sentence pair classification&#34;
+            )
             return
         if not self.c:
-            warnings.warn(&#39;currently_unsupported: explain does not support text regression&#39;)
+            warnings.warn(
+                &#34;currently_unsupported: explain does not support text regression&#34;
+            )
             return
         try:
             import eli5
             from eli5.lime import TextExplainer
         except:
-            msg = &#39;ktrain requires a forked version of eli5 to support tf.keras. &#39;+\
-                  &#39;Install with: pip install https://github.com/amaiya/eli5/archive/refs/heads/tfkeras_0_10_1.zip&#39;
-            warnings.warn(msg)
-            return
-        if not hasattr(eli5, &#39;KTRAIN_ELI5_TAG&#39;) or eli5.KTRAIN_ELI5_TAG != KTRAIN_ELI5_TAG:
-            msg = &#39;ktrain requires a forked version of eli5 to support tf.keras. It is either missing or not up-to-date. &#39;+\
-                  &#39;Uninstall the current version and install/re-install the fork with: pip install https://github.com/amaiya/eli5/archive/refs/heads/tfkeras_0_10_1.zip&#39;
+            msg = (
+                &#34;ktrain requires a forked version of eli5 to support tf.keras. &#34;
+                + &#34;Install with: pip install https://github.com/amaiya/eli5-tf/archive/refs/heads/master.zip&#34;
+            )
             warnings.warn(msg)
             return
 
-        if not isinstance(doc, str): raise TypeError(&#39;text must of type str&#39;)
+        if not isinstance(doc, str):
+            raise TypeError(&#34;text must of type str&#34;)
         prediction = [self.predict(doc)] if not all_targets else None
 
         if self.preproc.is_nospace_lang():
             doc = self.preproc.process_chinese([doc])
             doc = doc[0]
-        doc = &#39; &#39;.join(doc.split()[:truncate_len])
+        doc = &#34; &#34;.join(doc.split()[:truncate_len])
         te = TextExplainer(random_state=42, n_samples=n_samples)
         _ = te.fit(doc, self.predict_proba)
-        return te.show_prediction(target_names=self.preproc.get_classes(), targets=prediction)
-
+        return te.show_prediction(
+            target_names=self.preproc.get_classes(), targets=prediction
+        )
 
     def _save_model(self, fpath):
         if isinstance(self.preproc, TransformersPreprocessor):
@@ -389,36 +428,40 @@ Lower this value if explain is taking too long.</p></div>
                         Lower this value if explain is taking too long.
     &#34;&#34;&#34;
     is_array, is_pair = detect_text_format(doc)
-    if is_pair: 
-        warnings.warn(&#39;currently_unsupported: explain does not currently support sentence pair classification&#39;)
+    if is_pair:
+        warnings.warn(
+            &#34;currently_unsupported: explain does not currently support sentence pair classification&#34;
+        )
         return
     if not self.c:
-        warnings.warn(&#39;currently_unsupported: explain does not support text regression&#39;)
+        warnings.warn(
+            &#34;currently_unsupported: explain does not support text regression&#34;
+        )
         return
     try:
         import eli5
         from eli5.lime import TextExplainer
     except:
-        msg = &#39;ktrain requires a forked version of eli5 to support tf.keras. &#39;+\
-              &#39;Install with: pip install https://github.com/amaiya/eli5/archive/refs/heads/tfkeras_0_10_1.zip&#39;
-        warnings.warn(msg)
-        return
-    if not hasattr(eli5, &#39;KTRAIN_ELI5_TAG&#39;) or eli5.KTRAIN_ELI5_TAG != KTRAIN_ELI5_TAG:
-        msg = &#39;ktrain requires a forked version of eli5 to support tf.keras. It is either missing or not up-to-date. &#39;+\
-              &#39;Uninstall the current version and install/re-install the fork with: pip install https://github.com/amaiya/eli5/archive/refs/heads/tfkeras_0_10_1.zip&#39;
+        msg = (
+            &#34;ktrain requires a forked version of eli5 to support tf.keras. &#34;
+            + &#34;Install with: pip install https://github.com/amaiya/eli5-tf/archive/refs/heads/master.zip&#34;
+        )
         warnings.warn(msg)
         return
 
-    if not isinstance(doc, str): raise TypeError(&#39;text must of type str&#39;)
+    if not isinstance(doc, str):
+        raise TypeError(&#34;text must of type str&#34;)
     prediction = [self.predict(doc)] if not all_targets else None
 
     if self.preproc.is_nospace_lang():
         doc = self.preproc.process_chinese([doc])
         doc = doc[0]
-    doc = &#39; &#39;.join(doc.split()[:truncate_len])
+    doc = &#34; &#34;.join(doc.split()[:truncate_len])
     te = TextExplainer(random_state=42, n_samples=n_samples)
     _ = te.fit(doc, self.predict_proba)
-    return te.show_prediction(target_names=self.preproc.get_classes(), targets=prediction)</code></pre>
+    return te.show_prediction(
+        target_names=self.preproc.get_classes(), targets=prediction
+    )</code></pre>
 </details>
 </dd>
 <dt id="ktrain.text.predictor.TextPredictor.get_classes"><code class="name flex">
@@ -435,7 +478,7 @@ Lower this value if explain is taking too long.</p></div>
 </details>
 </dd>
 <dt id="ktrain.text.predictor.TextPredictor.predict"><code class="name flex">
-<span>def <span class="ident">predict</span></span>(<span>self, texts, return_proba=False)</span>
+<span>def <span class="ident">predict</span></span>(<span>self, texts, return_proba=False, use_tf_dataset=False, verbose=0)</span>
 </code></dt>
 <dd>
 <div class="desc"><pre><code>
@@ -450,12 +493,15 @@ Args:
                    A single tuple of the form (str, str) is automatically treated as sentence pair classification, so
                    please refrain from using tuples for text classification tasks.
   return_proba(bool): If True, return probabilities instead of predicted class labels
+  use_tf_dataset(bool): If True, wraps dataset in a tf.Dataset when passing input to model.
+
+  verbose(int): verbosity: 0 (silent), 1 (progress bar), 2 (single line)
 </code></pre></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def predict(self, texts, return_proba=False):
+<pre><code class="python">def predict(self, texts, return_proba=False, use_tf_dataset=False, verbose=0):
     &#34;&#34;&#34;
     ```
 
@@ -470,30 +516,45 @@ Args:
                        A single tuple of the form (str, str) is automatically treated as sentence pair classification, so
                        please refrain from using tuples for text classification tasks.
       return_proba(bool): If True, return probabilities instead of predicted class labels
+      use_tf_dataset(bool): If True, wraps dataset in a tf.Dataset when passing input to model.
+
+      verbose(int): verbosity: 0 (silent), 1 (progress bar), 2 (single line)
     ```
     &#34;&#34;&#34;
 
     is_array, is_pair = detect_text_format(texts)
-    if not is_array: texts = [texts]
+    if not is_array:
+        texts = [texts]
 
     classification, multilabel = U.is_classifier(self.model)
 
     # get predictions
     if U.is_huggingface(model=self.model):
         tseq = self.preproc.preprocess_test(texts, verbose=0)
-        tseq.batch_size = self.batch_size
-        tfd = tseq.to_tfdataset(train=False)
-        preds = self.model.predict(tfd)
-        if hasattr(preds, &#39;logits&#39;): # dep_fix: breaking change - also needed for LongFormer
-        #if type(preds).__name__ == &#39;TFSequenceClassifierOutput&#39;: # dep_fix: undocumented breaking change in transformers==4.0.0
+        if use_tf_dataset:
+            tseq.batch_size = self.batch_size
+            tfd = tseq.to_tfdataset(train=False)
+            preds = self.model.predict(tfd, verbose=verbose)
+        else:
+            data = tseq.to_array()
+            preds = self.model.predict(
+                data, batch_size=self.batch_size, verbose=verbose
+            )
+        if hasattr(
+            preds, &#34;logits&#34;
+        ):  # dep_fix: breaking change - also needed for LongFormer
+            # if type(preds).__name__ == &#39;TFSequenceClassifierOutput&#39;: # dep_fix: undocumented breaking change in transformers==4.0.0
             # REFERENCE: https://discuss.huggingface.co/t/new-model-output-types/195
             preds = preds.logits
-        
+
         # dep_fix: transformers in TF 2.2.0 returns a tuple insead of NumPy array for some reason
-        if isinstance(preds, tuple) and len(preds) == 1: preds = preds[0] 
+        if isinstance(preds, tuple) and len(preds) == 1:
+            preds = preds[0]
     else:
         texts = self.preproc.preprocess(texts)
-        preds = self.model.predict(texts, batch_size=self.batch_size)
+        preds = self.model.predict(
+            texts, batch_size=self.batch_size, verbose=verbose
+        )
 
     # process predictions
     if U.is_huggingface(model=self.model):
@@ -504,16 +565,23 @@ Args:
             preds = keras.activations.softmax(tf.convert_to_tensor(preds)).numpy()
         else:
             preds = np.squeeze(preds)
-            if len(preds.shape) == 0: preds = np.expand_dims(preds, -1)
-    result =  preds if return_proba or multilabel or not self.c else [self.c[np.argmax(pred)] for pred in preds] 
+            if len(preds.shape) == 0:
+                preds = np.expand_dims(preds, -1)
+    result = (
+        preds
+        if return_proba or multilabel or not self.c
+        else [self.c[np.argmax(pred)] for pred in preds]
+    )
     if multilabel and not return_proba:
-        result =  [list(zip(self.c, r)) for r in result]
-    if not is_array: return result[0]
-    else:      return result</code></pre>
+        result = [list(zip(self.c, r)) for r in result]
+    if not is_array:
+        return result[0]
+    else:
+        return result</code></pre>
 </details>
 </dd>
 <dt id="ktrain.text.predictor.TextPredictor.predict_proba"><code class="name flex">
-<span>def <span class="ident">predict_proba</span></span>(<span>self, texts)</span>
+<span>def <span class="ident">predict_proba</span></span>(<span>self, texts, verbose=0)</span>
 </code></dt>
 <dd>
 <div class="desc"><pre><code>Makes predictions for a list of strings where each string is a document
@@ -524,7 +592,7 @@ Returns probabilities of each class.
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def predict_proba(self, texts):
+<pre><code class="python">def predict_proba(self, texts, verbose=0):
     &#34;&#34;&#34;
     ```
     Makes predictions for a list of strings where each string is a document
@@ -532,7 +600,7 @@ Returns probabilities of each class.
     Returns probabilities of each class.
     ```
     &#34;&#34;&#34;
-    return self.predict(texts, return_proba=True)</code></pre>
+    return self.predict(texts, return_proba=True, verbose=verbose)</code></pre>
 </details>
 </dd>
 </dl>
@@ -579,7 +647,7 @@ Returns probabilities of each class.
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.9.2</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
 </footer>
 </body>
 </html>

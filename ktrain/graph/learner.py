@@ -1,8 +1,6 @@
-from ..imports import *
 from .. import utils as U
 from ..core import GenLearner
-
-
+from ..imports import *
 
 
 class NodeClassLearner(GenLearner):
@@ -17,16 +15,27 @@ class NodeClassLearner(GenLearner):
     ```
     """
 
-
-    def __init__(self, model, train_data=None, val_data=None, 
-                 batch_size=U.DEFAULT_BS, eval_batch_size=U.DEFAULT_BS,
-                 workers=1, use_multiprocessing=False):
-        super().__init__(model, train_data=train_data, val_data=val_data, 
-                         batch_size=batch_size, eval_batch_size=eval_batch_size,
-                         workers=workers, use_multiprocessing=use_multiprocessing)
+    def __init__(
+        self,
+        model,
+        train_data=None,
+        val_data=None,
+        batch_size=U.DEFAULT_BS,
+        eval_batch_size=U.DEFAULT_BS,
+        workers=1,
+        use_multiprocessing=False,
+    ):
+        super().__init__(
+            model,
+            train_data=train_data,
+            val_data=val_data,
+            batch_size=batch_size,
+            eval_batch_size=eval_batch_size,
+            workers=workers,
+            use_multiprocessing=use_multiprocessing,
+        )
         return
 
-    
     def view_top_losses(self, n=4, preproc=None, val_data=None):
         """
         ```
@@ -41,13 +50,12 @@ class NodeClassLearner(GenLearner):
                                  to correctly view raw data.
           val_data:  optional val_data to use instead of self.val_data
         Returns:
-            list of n tuples where first element is either 
+            list of n tuples where first element is either
             filepath or id of validation example and second element
             is loss.
         ```
         """
         val = self._check_val(val_data)
-
 
         # get top losses and associated data
         tups = self.top_losses(n=n, val_data=val, preproc=preproc)
@@ -56,19 +64,19 @@ class NodeClassLearner(GenLearner):
         classes = preproc.get_classes() if preproc is not None else None
         # iterate through losses
         for tup in tups:
-
             # get data
             idx = tup[0]
             loss = tup[1]
             truth = tup[2]
             pred = tup[3]
 
-            print('----------')
-            print("id:%s | loss:%s | true:%s | pred:%s)\n" % (idx, round(loss,2), truth, pred))
-            #print(obs)
+            print("----------")
+            print(
+                "id:%s | loss:%s | true:%s | pred:%s)\n"
+                % (idx, round(loss, 2), truth, pred)
+            )
+            # print(obs)
         return
-
-
 
     def layer_output(self, layer_id, example_id=0, batch_id=0, use_val=False):
         """
@@ -77,8 +85,10 @@ class NodeClassLearner(GenLearner):
         Uses first example (example_id=0) from training set, by default.
         ```
         """
-        raise Exception('currently_unsupported: layer_output method is not yet supported for ' +
-                      'graph neural networks in ktrain')
+        raise Exception(
+            "currently_unsupported: layer_output method is not yet supported for "
+            + "graph neural networks in ktrain"
+        )
 
 
 class LinkPredLearner(GenLearner):
@@ -93,16 +103,27 @@ class LinkPredLearner(GenLearner):
     ```
     """
 
-
-    def __init__(self, model, train_data=None, val_data=None, 
-                 batch_size=U.DEFAULT_BS, eval_batch_size=U.DEFAULT_BS,
-                 workers=1, use_multiprocessing=False):
-        super().__init__(model, train_data=train_data, val_data=val_data, 
-                         batch_size=batch_size, eval_batch_size=eval_batch_size,
-                         workers=workers, use_multiprocessing=use_multiprocessing)
+    def __init__(
+        self,
+        model,
+        train_data=None,
+        val_data=None,
+        batch_size=U.DEFAULT_BS,
+        eval_batch_size=U.DEFAULT_BS,
+        workers=1,
+        use_multiprocessing=False,
+    ):
+        super().__init__(
+            model,
+            train_data=train_data,
+            val_data=val_data,
+            batch_size=batch_size,
+            eval_batch_size=eval_batch_size,
+            workers=workers,
+            use_multiprocessing=use_multiprocessing,
+        )
         return
 
-    
     def view_top_losses(self, n=4, preproc=None, val_data=None):
         """
         ```
@@ -117,13 +138,12 @@ class LinkPredLearner(GenLearner):
                                  to correctly view raw data.
           val_data:  optional val_data to use instead of self.val_data
         Returns:
-            list of n tuples where first element is either 
+            list of n tuples where first element is either
             filepath or id of validation example and second element
             is loss.
         ```
         """
         val = self._check_val(val_data)
-
 
         # get top losses and associated data
         tups = self.top_losses(n=n, val_data=val, preproc=preproc)
@@ -132,19 +152,19 @@ class LinkPredLearner(GenLearner):
         classes = preproc.get_classes() if preproc is not None else None
         # iterate through losses
         for tup in tups:
-
             # get data
             idx = tup[0]
             loss = tup[1]
             truth = tup[2]
             pred = tup[3]
 
-            print('----------')
-            print("id:%s | loss:%s | true:%s | pred:%s)\n" % (idx, round(loss,2), truth, pred))
-            #print(obs)
+            print("----------")
+            print(
+                "id:%s | loss:%s | true:%s | pred:%s)\n"
+                % (idx, round(loss, 2), truth, pred)
+            )
+            # print(obs)
         return
-
-
 
     def layer_output(self, layer_id, example_id=0, batch_id=0, use_val=False):
         """
@@ -153,7 +173,7 @@ class LinkPredLearner(GenLearner):
         Uses first example (example_id=0) from training set, by default.
         ```
         """
-        raise Exception('currently_unsupported: layer_output method is not yet supported for ' +
-                      'graph neural networks in ktrain')
-
-
+        raise Exception(
+            "currently_unsupported: layer_output method is not yet supported for "
+            + "graph neural networks in ktrain"
+        )

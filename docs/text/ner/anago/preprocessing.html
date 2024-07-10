@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.9.2" />
+<meta name="generator" content="pdoc 0.10.0" />
 <title>ktrain.text.ner.anago.preprocessing API documentation</title>
 <meta name="description" content="Preprocessors." />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
@@ -32,25 +32,24 @@
 Preprocessors.
 &#34;&#34;&#34;
 
-from ....imports import *
 from .... import utils as U
+from ....imports import *
 from .utils import Vocabulary
-
 
 try:
     from allennlp.modules.elmo import Elmo, batch_to_ids
+
     ALLENNLP_INSTALLED = True
 except:
     ALLENNLP_INSTALLED = False
 
 
-options_file = &#39;https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json&#39;
-weight_file = &#39;https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5&#39;
-
+options_file = &#34;https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json&#34;
+weight_file = &#34;https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5&#34;
 
 
 def normalize_number(text):
-    return re.sub(r&#39;[0-9０１２３４５６７８９]&#39;, r&#39;0&#39;, text)
+    return re.sub(r&#34;[0-9０１２３４５６７８９]&#34;, r&#34;0&#34;, text)
 
 
 class IndexTransformer(BaseEstimator, TransformerMixin):
@@ -64,9 +63,14 @@ class IndexTransformer(BaseEstimator, TransformerMixin):
         _label_vocab: dict. A mapping of labels to feature indices.
     &#34;&#34;&#34;
 
-    def __init__(self, lower=True, num_norm=True,
-                 use_char=True, initial_vocab=None,
-                 use_elmo=False):
+    def __init__(
+        self,
+        lower=True,
+        num_norm=True,
+        use_char=True,
+        initial_vocab=None,
+        use_elmo=False,
+    ):
         &#34;&#34;&#34;Create a preprocessor object.
 
         Args:
@@ -88,101 +92,128 @@ class IndexTransformer(BaseEstimator, TransformerMixin):
 
         self.elmo = None  # elmo embedding model
         self.use_elmo = False
-        self.te = None    # transformer embedding model
+        self.te = None  # transformer embedding model
         self.te_layers = U.DEFAULT_TRANSFORMER_LAYERS
         self.te_model = None
-        self._blacklist = [&#39;te&#39;, &#39;elmo&#39;]
+        self._blacklist = [&#34;te&#34;, &#34;elmo&#34;]
 
     def __getstate__(self):
         return {k: v for k, v in self.__dict__.items() if k not in self._blacklist}
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-        if not hasattr(self, &#39;te_model&#39;): self.te_model = None
-        if not hasattr(self, &#39;use_elmo&#39;): self.use_elmo = False
-        if not hasattr(self, &#39;te_layers&#39;): self.te_layers = U.DEFAULT_TRANSFORMER_LAYERS
+        if not hasattr(self, &#34;te_model&#34;):
+            self.te_model = None
+        if not hasattr(self, &#34;use_elmo&#34;):
+            self.use_elmo = False
+        if not hasattr(self, &#34;te_layers&#34;):
+            self.te_layers = U.DEFAULT_TRANSFORMER_LAYERS
 
         try:
-            if self.te_model is not None: self.activate_transformer(self.te_model, layers=self.te_layers)
+            if self.te_model is not None:
+                self.activate_transformer(self.te_model, layers=self.te_layers)
             else:
                 self.te = None
         except:
-            self.te = None # set in predictor for support for air-gapped networks
-        if self.use_elmo:  
+            self.te = None  # set in predictor for support for air-gapped networks
+        if self.use_elmo:
             self.activate_elmo()
         else:
             self.elmo = None
-
 
     def activate_elmo(self):
         if not ALLENNLP_INSTALLED:
             raise Exception(ALLENNLP_ERRMSG)
 
-        if not hasattr(self, &#39;elmo&#39;): self.elmo=None
+        if not hasattr(self, &#34;elmo&#34;):
+            self.elmo = None
         if self.elmo is None:
             self.elmo = Elmo(options_file, weight_file, 2, dropout=0)
         self.use_elmo = True
 
-    def activate_transformer(self, model_name, layers=U.DEFAULT_TRANSFORMER_LAYERS, 
-                              force=False):
+    def activate_transformer(
+        self, model_name, layers=U.DEFAULT_TRANSFORMER_LAYERS, force=False
+    ):
         from ...preprocessor import TransformerEmbedding
-        if not hasattr(self, &#39;te&#39;): self.te = None
+
+        if not hasattr(self, &#34;te&#34;):
+            self.te = None
         if self.te is None or self.te_model != model_name or force:
             self.te_model = model_name
             self.te = TransformerEmbedding(model_name, layers=layers)
         self.te_layers = layers
 
     def get_transformer_dim(self):
-        if not self.transformer_is_activated(): 
+        if not self.transformer_is_activated():
             return None
         else:
             return self.te.embsize
 
-
     def elmo_is_activated(self):
         return self.elmo is not None
-
 
     def transformer_is_activated(self):
         return self.te is not None
 
-            
-    def fix_tokenization(self, X, Y, maxlen=U.DEFAULT_TRANSFORMER_MAXLEN, num_special=U.DEFAULT_TRANSFORMER_NUM_SPECIAL):
+    def fix_tokenization(
+        self,
+        X,
+        Y,
+        maxlen=U.DEFAULT_TRANSFORMER_MAXLEN,
+        num_special=U.DEFAULT_TRANSFORMER_NUM_SPECIAL,
+    ):
         &#34;&#34;&#34;
         Should be called prior training
         &#34;&#34;&#34;
         if not self.transformer_is_activated():
             return X, Y
         ids2tok = self.te.tokenizer.convert_ids_to_tokens
-        encode = self.te.tokenizer.encode
+        encode = self.te.tokenizer.encode_plus
         new_X = []
         new_Y = []
         for i, x in enumerate(X):
             new_x = []
-            new_y =[]
+            new_y = []
             seq_len = 0
-            for j,s in enumerate(x):
-                subtokens = ids2tok(encode(s, add_special_tokens=False))
+            for j, s in enumerate(x):
+                # subtokens = ids2tok(encode(s, add_special_tokens=False))
+                encoded_input = encode(
+                    s, add_special_tokens=False, return_offsets_mapping=True
+                )
+                offsets = encoded_input[&#34;offset_mapping&#34;]
+                subtokens = encoded_input.tokens()
                 token_len = len(subtokens)
-                if seq_len + token_len &gt; (maxlen - num_special):
+                if (seq_len + token_len) &gt; (maxlen - num_special):
                     break
                 seq_len += token_len
-                hf_s = &#39; &#39;.join(subtokens).replace(&#39; ##&#39;, &#39;&#39;).split()
+
+                if len(s.split()) == 1:
+                    hf_s = [s]
+                else:
+                    word_ids = encoded_input.word_ids()
+                    hf_s = []
+                    for k, subtoken in enumerate(subtokens):
+                        word_id = word_ids[k]
+                        currlen = len(hf_s)
+                        if currlen == word_id + 1:
+                            hf_s[word_id].append(offsets[k])
+                        elif word_id + 1 &gt; currlen:
+                            hf_s.append([offsets[k]])
+                    hf_s = [s[entry[0][0] : entry[-1][1]] for entry in hf_s]
+
                 new_x.extend(hf_s)
                 if Y is not None:
                     tag = Y[i][j]
                     new_y.extend([tag])
                     if len(hf_s) &gt; 1:
                         new_tag = tag
-                        if tag.startswith(&#39;B-&#39;): new_tag = &#39;I-&#39;+tag[2:]
-                        new_y.extend([new_tag]*(len(hf_s)-1) )
-                    #if tag.startswith(&#39;B-&#39;): tag = &#39;I-&#39;+tag[2:]
-
+                        if tag.startswith(&#34;B-&#34;):
+                            new_tag = &#34;I-&#34; + tag[2:]
+                        new_y.extend([new_tag] * (len(hf_s) - 1))
             new_X.append(new_x)
             new_Y.append(new_y)
         new_Y = None if Y is None else new_Y
         return new_X, new_Y
-
 
     def fit(self, X, y):
         &#34;&#34;&#34;Learn vocabulary from training set.
@@ -205,7 +236,6 @@ class IndexTransformer(BaseEstimator, TransformerMixin):
 
         return self
 
-
     def transform(self, X, y=None):
         &#34;&#34;&#34;Transform documents to document ids.
 
@@ -221,14 +251,15 @@ class IndexTransformer(BaseEstimator, TransformerMixin):
             y: label id matrix.
         &#34;&#34;&#34;
         # re-instantiate TransformerEmbedding/Elmo if necessary since it is excluded from pickling
-        if self.te_model is not None: self.activate_transformer(self.te_model, layers=self.te_layers)
-        if self.use_elmo: self.activate_elmo()
-
+        if self.te_model is not None:
+            self.activate_transformer(self.te_model, layers=self.te_layers)
+        if self.use_elmo:
+            self.activate_elmo()
 
         features = []
 
         word_ids = [self._word_vocab.doc2id(doc) for doc in X]
-        word_ids = keras.preprocessing.sequence.pad_sequences(word_ids, padding=&#39;post&#39;)
+        word_ids = keras.preprocessing.sequence.pad_sequences(word_ids, padding=&#34;post&#34;)
         features.append(word_ids)
 
         if self._use_char:
@@ -237,22 +268,22 @@ class IndexTransformer(BaseEstimator, TransformerMixin):
             features.append(char_ids)
 
         if self.elmo is not None:
-            if not ALLENNLP_INSTALLED:        
+            if not ALLENNLP_INSTALLED:
                 raise Exception(ALLENNLP_ERRMSG)
 
             character_ids = batch_to_ids(X)
-            elmo_embeddings = self.elmo(character_ids)[&#39;elmo_representations&#39;][1]
+            elmo_embeddings = self.elmo(character_ids)[&#34;elmo_representations&#34;][1]
             elmo_embeddings = elmo_embeddings.detach().numpy()
             features.append(elmo_embeddings)
 
         if self.te is not None:
             transformer_embeddings = self.te.embed(X, word_level=True)
             features.append(transformer_embeddings)
-
+            # print(f&#39; | {X} | [trans_shape={transformer_embeddings.shape[1]} | word_id_shape={len(word_ids)}&#39;)
 
         if y is not None:
             y = [self._label_vocab.doc2id(doc) for doc in y]
-            y = keras.preprocessing.sequence.pad_sequences(y, padding=&#39;post&#39;)
+            y = keras.preprocessing.sequence.pad_sequences(y, padding=&#34;post&#34;)
             y = keras.utils.to_categorical(y, self.label_size).astype(int)
             # In 2018/06/01, to_categorical is a bit strange.
             # &gt;&gt;&gt; to_categorical([[1,3]], num_classes=4).shape
@@ -264,7 +295,6 @@ class IndexTransformer(BaseEstimator, TransformerMixin):
             return features, y
         else:
             return features
-
 
     def fit_transform(self, X, y=None, **params):
         &#34;&#34;&#34;Learn vocabulary and return document id matrix.
@@ -320,7 +350,7 @@ class IndexTransformer(BaseEstimator, TransformerMixin):
         return p
 
 
-def pad_nested_sequences(sequences, dtype=&#39;int32&#39;):
+def pad_nested_sequences(sequences, dtype=&#34;int32&#34;):
     &#34;&#34;&#34;Pads nested sequences to the same length.
 
     This function transforms a list of list sequences
@@ -343,7 +373,7 @@ def pad_nested_sequences(sequences, dtype=&#39;int32&#39;):
     x = np.zeros((len(sequences), max_sent_len, max_word_len)).astype(dtype)
     for i, sent in enumerate(sequences):
         for j, word in enumerate(sent):
-            x[i, j, :len(word)] = word
+            x[i, j, : len(word)] = word
 
     return x</code></pre>
 </details>
@@ -365,7 +395,7 @@ def pad_nested_sequences(sequences, dtype=&#39;int32&#39;):
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def normalize_number(text):
-    return re.sub(r&#39;[0-9０１２３４５６７８９]&#39;, r&#39;0&#39;, text)</code></pre>
+    return re.sub(r&#34;[0-9０１２３４５６７８９]&#34;, r&#34;0&#34;, text)</code></pre>
 </details>
 </dd>
 <dt id="ktrain.text.ner.anago.preprocessing.pad_nested_sequences"><code class="name flex">
@@ -389,7 +419,7 @@ into a 3D Numpy array of shape <code>(num_samples, max_sent_len, max_word_len)</
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def pad_nested_sequences(sequences, dtype=&#39;int32&#39;):
+<pre><code class="python">def pad_nested_sequences(sequences, dtype=&#34;int32&#34;):
     &#34;&#34;&#34;Pads nested sequences to the same length.
 
     This function transforms a list of list sequences
@@ -412,7 +442,7 @@ into a 3D Numpy array of shape <code>(num_samples, max_sent_len, max_word_len)</
     x = np.zeros((len(sequences), max_sent_len, max_word_len)).astype(dtype)
     for i, sent in enumerate(sequences):
         for j, word in enumerate(sent):
-            x[i, j, :len(word)] = word
+            x[i, j, : len(word)] = word
 
     return x</code></pre>
 </details>
@@ -470,9 +500,14 @@ into a 3D Numpy array of shape <code>(num_samples, max_sent_len, max_word_len)</
         _label_vocab: dict. A mapping of labels to feature indices.
     &#34;&#34;&#34;
 
-    def __init__(self, lower=True, num_norm=True,
-                 use_char=True, initial_vocab=None,
-                 use_elmo=False):
+    def __init__(
+        self,
+        lower=True,
+        num_norm=True,
+        use_char=True,
+        initial_vocab=None,
+        use_elmo=False,
+    ):
         &#34;&#34;&#34;Create a preprocessor object.
 
         Args:
@@ -494,101 +529,128 @@ into a 3D Numpy array of shape <code>(num_samples, max_sent_len, max_word_len)</
 
         self.elmo = None  # elmo embedding model
         self.use_elmo = False
-        self.te = None    # transformer embedding model
+        self.te = None  # transformer embedding model
         self.te_layers = U.DEFAULT_TRANSFORMER_LAYERS
         self.te_model = None
-        self._blacklist = [&#39;te&#39;, &#39;elmo&#39;]
+        self._blacklist = [&#34;te&#34;, &#34;elmo&#34;]
 
     def __getstate__(self):
         return {k: v for k, v in self.__dict__.items() if k not in self._blacklist}
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-        if not hasattr(self, &#39;te_model&#39;): self.te_model = None
-        if not hasattr(self, &#39;use_elmo&#39;): self.use_elmo = False
-        if not hasattr(self, &#39;te_layers&#39;): self.te_layers = U.DEFAULT_TRANSFORMER_LAYERS
+        if not hasattr(self, &#34;te_model&#34;):
+            self.te_model = None
+        if not hasattr(self, &#34;use_elmo&#34;):
+            self.use_elmo = False
+        if not hasattr(self, &#34;te_layers&#34;):
+            self.te_layers = U.DEFAULT_TRANSFORMER_LAYERS
 
         try:
-            if self.te_model is not None: self.activate_transformer(self.te_model, layers=self.te_layers)
+            if self.te_model is not None:
+                self.activate_transformer(self.te_model, layers=self.te_layers)
             else:
                 self.te = None
         except:
-            self.te = None # set in predictor for support for air-gapped networks
-        if self.use_elmo:  
+            self.te = None  # set in predictor for support for air-gapped networks
+        if self.use_elmo:
             self.activate_elmo()
         else:
             self.elmo = None
-
 
     def activate_elmo(self):
         if not ALLENNLP_INSTALLED:
             raise Exception(ALLENNLP_ERRMSG)
 
-        if not hasattr(self, &#39;elmo&#39;): self.elmo=None
+        if not hasattr(self, &#34;elmo&#34;):
+            self.elmo = None
         if self.elmo is None:
             self.elmo = Elmo(options_file, weight_file, 2, dropout=0)
         self.use_elmo = True
 
-    def activate_transformer(self, model_name, layers=U.DEFAULT_TRANSFORMER_LAYERS, 
-                              force=False):
+    def activate_transformer(
+        self, model_name, layers=U.DEFAULT_TRANSFORMER_LAYERS, force=False
+    ):
         from ...preprocessor import TransformerEmbedding
-        if not hasattr(self, &#39;te&#39;): self.te = None
+
+        if not hasattr(self, &#34;te&#34;):
+            self.te = None
         if self.te is None or self.te_model != model_name or force:
             self.te_model = model_name
             self.te = TransformerEmbedding(model_name, layers=layers)
         self.te_layers = layers
 
     def get_transformer_dim(self):
-        if not self.transformer_is_activated(): 
+        if not self.transformer_is_activated():
             return None
         else:
             return self.te.embsize
 
-
     def elmo_is_activated(self):
         return self.elmo is not None
-
 
     def transformer_is_activated(self):
         return self.te is not None
 
-            
-    def fix_tokenization(self, X, Y, maxlen=U.DEFAULT_TRANSFORMER_MAXLEN, num_special=U.DEFAULT_TRANSFORMER_NUM_SPECIAL):
+    def fix_tokenization(
+        self,
+        X,
+        Y,
+        maxlen=U.DEFAULT_TRANSFORMER_MAXLEN,
+        num_special=U.DEFAULT_TRANSFORMER_NUM_SPECIAL,
+    ):
         &#34;&#34;&#34;
         Should be called prior training
         &#34;&#34;&#34;
         if not self.transformer_is_activated():
             return X, Y
         ids2tok = self.te.tokenizer.convert_ids_to_tokens
-        encode = self.te.tokenizer.encode
+        encode = self.te.tokenizer.encode_plus
         new_X = []
         new_Y = []
         for i, x in enumerate(X):
             new_x = []
-            new_y =[]
+            new_y = []
             seq_len = 0
-            for j,s in enumerate(x):
-                subtokens = ids2tok(encode(s, add_special_tokens=False))
+            for j, s in enumerate(x):
+                # subtokens = ids2tok(encode(s, add_special_tokens=False))
+                encoded_input = encode(
+                    s, add_special_tokens=False, return_offsets_mapping=True
+                )
+                offsets = encoded_input[&#34;offset_mapping&#34;]
+                subtokens = encoded_input.tokens()
                 token_len = len(subtokens)
-                if seq_len + token_len &gt; (maxlen - num_special):
+                if (seq_len + token_len) &gt; (maxlen - num_special):
                     break
                 seq_len += token_len
-                hf_s = &#39; &#39;.join(subtokens).replace(&#39; ##&#39;, &#39;&#39;).split()
+
+                if len(s.split()) == 1:
+                    hf_s = [s]
+                else:
+                    word_ids = encoded_input.word_ids()
+                    hf_s = []
+                    for k, subtoken in enumerate(subtokens):
+                        word_id = word_ids[k]
+                        currlen = len(hf_s)
+                        if currlen == word_id + 1:
+                            hf_s[word_id].append(offsets[k])
+                        elif word_id + 1 &gt; currlen:
+                            hf_s.append([offsets[k]])
+                    hf_s = [s[entry[0][0] : entry[-1][1]] for entry in hf_s]
+
                 new_x.extend(hf_s)
                 if Y is not None:
                     tag = Y[i][j]
                     new_y.extend([tag])
                     if len(hf_s) &gt; 1:
                         new_tag = tag
-                        if tag.startswith(&#39;B-&#39;): new_tag = &#39;I-&#39;+tag[2:]
-                        new_y.extend([new_tag]*(len(hf_s)-1) )
-                    #if tag.startswith(&#39;B-&#39;): tag = &#39;I-&#39;+tag[2:]
-
+                        if tag.startswith(&#34;B-&#34;):
+                            new_tag = &#34;I-&#34; + tag[2:]
+                        new_y.extend([new_tag] * (len(hf_s) - 1))
             new_X.append(new_x)
             new_Y.append(new_y)
         new_Y = None if Y is None else new_Y
         return new_X, new_Y
-
 
     def fit(self, X, y):
         &#34;&#34;&#34;Learn vocabulary from training set.
@@ -611,7 +673,6 @@ into a 3D Numpy array of shape <code>(num_samples, max_sent_len, max_word_len)</
 
         return self
 
-
     def transform(self, X, y=None):
         &#34;&#34;&#34;Transform documents to document ids.
 
@@ -627,14 +688,15 @@ into a 3D Numpy array of shape <code>(num_samples, max_sent_len, max_word_len)</
             y: label id matrix.
         &#34;&#34;&#34;
         # re-instantiate TransformerEmbedding/Elmo if necessary since it is excluded from pickling
-        if self.te_model is not None: self.activate_transformer(self.te_model, layers=self.te_layers)
-        if self.use_elmo: self.activate_elmo()
-
+        if self.te_model is not None:
+            self.activate_transformer(self.te_model, layers=self.te_layers)
+        if self.use_elmo:
+            self.activate_elmo()
 
         features = []
 
         word_ids = [self._word_vocab.doc2id(doc) for doc in X]
-        word_ids = keras.preprocessing.sequence.pad_sequences(word_ids, padding=&#39;post&#39;)
+        word_ids = keras.preprocessing.sequence.pad_sequences(word_ids, padding=&#34;post&#34;)
         features.append(word_ids)
 
         if self._use_char:
@@ -643,22 +705,22 @@ into a 3D Numpy array of shape <code>(num_samples, max_sent_len, max_word_len)</
             features.append(char_ids)
 
         if self.elmo is not None:
-            if not ALLENNLP_INSTALLED:        
+            if not ALLENNLP_INSTALLED:
                 raise Exception(ALLENNLP_ERRMSG)
 
             character_ids = batch_to_ids(X)
-            elmo_embeddings = self.elmo(character_ids)[&#39;elmo_representations&#39;][1]
+            elmo_embeddings = self.elmo(character_ids)[&#34;elmo_representations&#34;][1]
             elmo_embeddings = elmo_embeddings.detach().numpy()
             features.append(elmo_embeddings)
 
         if self.te is not None:
             transformer_embeddings = self.te.embed(X, word_level=True)
             features.append(transformer_embeddings)
-
+            # print(f&#39; | {X} | [trans_shape={transformer_embeddings.shape[1]} | word_id_shape={len(word_ids)}&#39;)
 
         if y is not None:
             y = [self._label_vocab.doc2id(doc) for doc in y]
-            y = keras.preprocessing.sequence.pad_sequences(y, padding=&#39;post&#39;)
+            y = keras.preprocessing.sequence.pad_sequences(y, padding=&#34;post&#34;)
             y = keras.utils.to_categorical(y, self.label_size).astype(int)
             # In 2018/06/01, to_categorical is a bit strange.
             # &gt;&gt;&gt; to_categorical([[1,3]], num_classes=4).shape
@@ -670,7 +732,6 @@ into a 3D Numpy array of shape <code>(num_samples, max_sent_len, max_word_len)</
             return features, y
         else:
             return features
-
 
     def fit_transform(self, X, y=None, **params):
         &#34;&#34;&#34;Learn vocabulary and return document id matrix.
@@ -728,7 +789,9 @@ into a 3D Numpy array of shape <code>(num_samples, max_sent_len, max_word_len)</
 <h3>Ancestors</h3>
 <ul class="hlist">
 <li>sklearn.base.BaseEstimator</li>
+<li>sklearn.utils._metadata_requests._MetadataRequester</li>
 <li>sklearn.base.TransformerMixin</li>
+<li>sklearn.utils._set_output._SetOutputMixin</li>
 </ul>
 <h3>Static methods</h3>
 <dl>
@@ -803,7 +866,8 @@ def word_vocab_size(self):
     if not ALLENNLP_INSTALLED:
         raise Exception(ALLENNLP_ERRMSG)
 
-    if not hasattr(self, &#39;elmo&#39;): self.elmo=None
+    if not hasattr(self, &#34;elmo&#34;):
+        self.elmo = None
     if self.elmo is None:
         self.elmo = Elmo(options_file, weight_file, 2, dropout=0)
     self.use_elmo = True</code></pre>
@@ -818,10 +882,13 @@ def word_vocab_size(self):
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def activate_transformer(self, model_name, layers=U.DEFAULT_TRANSFORMER_LAYERS, 
-                          force=False):
+<pre><code class="python">def activate_transformer(
+    self, model_name, layers=U.DEFAULT_TRANSFORMER_LAYERS, force=False
+):
     from ...preprocessor import TransformerEmbedding
-    if not hasattr(self, &#39;te&#39;): self.te = None
+
+    if not hasattr(self, &#34;te&#34;):
+        self.te = None
     if self.te is None or self.te_model != model_name or force:
         self.te_model = model_name
         self.te = TransformerEmbedding(model_name, layers=layers)
@@ -924,37 +991,61 @@ an iterable which yields either str, unicode or file objects.</p>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def fix_tokenization(self, X, Y, maxlen=U.DEFAULT_TRANSFORMER_MAXLEN, num_special=U.DEFAULT_TRANSFORMER_NUM_SPECIAL):
+<pre><code class="python">def fix_tokenization(
+    self,
+    X,
+    Y,
+    maxlen=U.DEFAULT_TRANSFORMER_MAXLEN,
+    num_special=U.DEFAULT_TRANSFORMER_NUM_SPECIAL,
+):
     &#34;&#34;&#34;
     Should be called prior training
     &#34;&#34;&#34;
     if not self.transformer_is_activated():
         return X, Y
     ids2tok = self.te.tokenizer.convert_ids_to_tokens
-    encode = self.te.tokenizer.encode
+    encode = self.te.tokenizer.encode_plus
     new_X = []
     new_Y = []
     for i, x in enumerate(X):
         new_x = []
-        new_y =[]
+        new_y = []
         seq_len = 0
-        for j,s in enumerate(x):
-            subtokens = ids2tok(encode(s, add_special_tokens=False))
+        for j, s in enumerate(x):
+            # subtokens = ids2tok(encode(s, add_special_tokens=False))
+            encoded_input = encode(
+                s, add_special_tokens=False, return_offsets_mapping=True
+            )
+            offsets = encoded_input[&#34;offset_mapping&#34;]
+            subtokens = encoded_input.tokens()
             token_len = len(subtokens)
-            if seq_len + token_len &gt; (maxlen - num_special):
+            if (seq_len + token_len) &gt; (maxlen - num_special):
                 break
             seq_len += token_len
-            hf_s = &#39; &#39;.join(subtokens).replace(&#39; ##&#39;, &#39;&#39;).split()
+
+            if len(s.split()) == 1:
+                hf_s = [s]
+            else:
+                word_ids = encoded_input.word_ids()
+                hf_s = []
+                for k, subtoken in enumerate(subtokens):
+                    word_id = word_ids[k]
+                    currlen = len(hf_s)
+                    if currlen == word_id + 1:
+                        hf_s[word_id].append(offsets[k])
+                    elif word_id + 1 &gt; currlen:
+                        hf_s.append([offsets[k]])
+                hf_s = [s[entry[0][0] : entry[-1][1]] for entry in hf_s]
+
             new_x.extend(hf_s)
             if Y is not None:
                 tag = Y[i][j]
                 new_y.extend([tag])
                 if len(hf_s) &gt; 1:
                     new_tag = tag
-                    if tag.startswith(&#39;B-&#39;): new_tag = &#39;I-&#39;+tag[2:]
-                    new_y.extend([new_tag]*(len(hf_s)-1) )
-                #if tag.startswith(&#39;B-&#39;): tag = &#39;I-&#39;+tag[2:]
-
+                    if tag.startswith(&#34;B-&#34;):
+                        new_tag = &#34;I-&#34; + tag[2:]
+                    new_y.extend([new_tag] * (len(hf_s) - 1))
         new_X.append(new_x)
         new_Y.append(new_y)
     new_Y = None if Y is None else new_Y
@@ -971,7 +1062,7 @@ an iterable which yields either str, unicode or file objects.</p>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def get_transformer_dim(self):
-    if not self.transformer_is_activated(): 
+    if not self.transformer_is_activated():
         return None
     else:
         return self.te.embsize</code></pre>
@@ -1029,6 +1120,87 @@ an iterable which yields either str, unicode or file objects.</p>
     joblib.dump(self, file_path)</code></pre>
 </details>
 </dd>
+<dt id="ktrain.text.ner.anago.preprocessing.IndexTransformer.set_inverse_transform_request"><code class="name flex">
+<span>def <span class="ident">set_inverse_transform_request</span></span>(<span>self: <a title="ktrain.text.ner.anago.preprocessing.IndexTransformer" href="#ktrain.text.ner.anago.preprocessing.IndexTransformer">IndexTransformer</a>, *, lengths: Union[bool, ForwardRef(None), str] = '$UNCHANGED$') ‑> <a title="ktrain.text.ner.anago.preprocessing.IndexTransformer" href="#ktrain.text.ner.anago.preprocessing.IndexTransformer">IndexTransformer</a></span>
+</code></dt>
+<dd>
+<div class="desc"><p>Request metadata passed to the <code>inverse_transform</code> method.</p>
+<p>Note that this method is only relevant if
+<code>enable_metadata_routing=True</code> (see :func:<code>sklearn.set_config</code>).
+Please see :ref:<code>User Guide &lt;metadata_routing&gt;</code> on how the routing
+mechanism works.</p>
+<p>The options for each parameter are:</p>
+<ul>
+<li>
+<p><code>True</code>: metadata is requested, and passed to <code>inverse_transform</code> if provided. The request is ignored if metadata is not provided.</p>
+</li>
+<li>
+<p><code>False</code>: metadata is not requested and the meta-estimator will not pass it to <code>inverse_transform</code>.</p>
+</li>
+<li>
+<p><code>None</code>: metadata is not requested, and the meta-estimator will raise an error if the user provides it.</p>
+</li>
+<li>
+<p><code>str</code>: metadata should be passed to the meta-estimator with this given alias instead of the original name.</p>
+</li>
+</ul>
+<p>The default (<code>sklearn.utils.metadata_routing.UNCHANGED</code>) retains the
+existing request. This allows you to change the request for some
+parameters and not others.</p>
+<div class="admonition versionadded">
+<p class="admonition-title">Added in version:&ensp;1.3</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This method is only relevant if this estimator is used as a
+sub-estimator of a meta-estimator, e.g. used inside a
+:class:<code>pipeline.Pipeline</code>. Otherwise it has no effect.</p>
+</div>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>lengths</code></strong> :&ensp;<code>str, True, False,</code> or <code>None</code>,
+default=<code>sklearn.utils.metadata_routing.UNCHANGED</code></dt>
+<dd>Metadata routing for <code>lengths</code> parameter in <code>inverse_transform</code>.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><strong><code>self</code></strong> :&ensp;<code>object</code></dt>
+<dd>The updated object.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def func(**kw):
+    &#34;&#34;&#34;Updates the request for provided parameters
+
+    This docstring is overwritten below.
+    See REQUESTER_DOC for expected functionality
+    &#34;&#34;&#34;
+    if not _routing_enabled():
+        raise RuntimeError(
+            &#34;This method is only available when metadata routing is enabled.&#34;
+            &#34; You can enable it using&#34;
+            &#34; sklearn.set_config(enable_metadata_routing=True).&#34;
+        )
+
+    if self.validate_keys and (set(kw) - set(self.keys)):
+        raise TypeError(
+            f&#34;Unexpected args: {set(kw) - set(self.keys)}. Accepted arguments&#34;
+            f&#34; are: {set(self.keys)}&#34;
+        )
+
+    requests = instance._get_metadata_request()
+    method_metadata_request = getattr(requests, self.name)
+
+    for prop, alias in kw.items():
+        if alias is not UNCHANGED:
+            method_metadata_request.add_request(param=prop, alias=alias)
+    instance._metadata_request = requests
+
+    return instance</code></pre>
+</details>
+</dd>
 <dt id="ktrain.text.ner.anago.preprocessing.IndexTransformer.transform"><code class="name flex">
 <span>def <span class="ident">transform</span></span>(<span>self, X, y=None)</span>
 </code></dt>
@@ -1065,14 +1237,15 @@ y : iterabl, label strings.</p>
         y: label id matrix.
     &#34;&#34;&#34;
     # re-instantiate TransformerEmbedding/Elmo if necessary since it is excluded from pickling
-    if self.te_model is not None: self.activate_transformer(self.te_model, layers=self.te_layers)
-    if self.use_elmo: self.activate_elmo()
-
+    if self.te_model is not None:
+        self.activate_transformer(self.te_model, layers=self.te_layers)
+    if self.use_elmo:
+        self.activate_elmo()
 
     features = []
 
     word_ids = [self._word_vocab.doc2id(doc) for doc in X]
-    word_ids = keras.preprocessing.sequence.pad_sequences(word_ids, padding=&#39;post&#39;)
+    word_ids = keras.preprocessing.sequence.pad_sequences(word_ids, padding=&#34;post&#34;)
     features.append(word_ids)
 
     if self._use_char:
@@ -1081,22 +1254,22 @@ y : iterabl, label strings.</p>
         features.append(char_ids)
 
     if self.elmo is not None:
-        if not ALLENNLP_INSTALLED:        
+        if not ALLENNLP_INSTALLED:
             raise Exception(ALLENNLP_ERRMSG)
 
         character_ids = batch_to_ids(X)
-        elmo_embeddings = self.elmo(character_ids)[&#39;elmo_representations&#39;][1]
+        elmo_embeddings = self.elmo(character_ids)[&#34;elmo_representations&#34;][1]
         elmo_embeddings = elmo_embeddings.detach().numpy()
         features.append(elmo_embeddings)
 
     if self.te is not None:
         transformer_embeddings = self.te.embed(X, word_level=True)
         features.append(transformer_embeddings)
-
+        # print(f&#39; | {X} | [trans_shape={transformer_embeddings.shape[1]} | word_id_shape={len(word_ids)}&#39;)
 
     if y is not None:
         y = [self._label_vocab.doc2id(doc) for doc in y]
-        y = keras.preprocessing.sequence.pad_sequences(y, padding=&#39;post&#39;)
+        y = keras.preprocessing.sequence.pad_sequences(y, padding=&#34;post&#34;)
         y = keras.utils.to_categorical(y, self.label_size).astype(int)
         # In 2018/06/01, to_categorical is a bit strange.
         # &gt;&gt;&gt; to_categorical([[1,3]], num_classes=4).shape
@@ -1162,6 +1335,7 @@ y : iterabl, label strings.</p>
 <li><code><a title="ktrain.text.ner.anago.preprocessing.IndexTransformer.label_size" href="#ktrain.text.ner.anago.preprocessing.IndexTransformer.label_size">label_size</a></code></li>
 <li><code><a title="ktrain.text.ner.anago.preprocessing.IndexTransformer.load" href="#ktrain.text.ner.anago.preprocessing.IndexTransformer.load">load</a></code></li>
 <li><code><a title="ktrain.text.ner.anago.preprocessing.IndexTransformer.save" href="#ktrain.text.ner.anago.preprocessing.IndexTransformer.save">save</a></code></li>
+<li><code><a title="ktrain.text.ner.anago.preprocessing.IndexTransformer.set_inverse_transform_request" href="#ktrain.text.ner.anago.preprocessing.IndexTransformer.set_inverse_transform_request">set_inverse_transform_request</a></code></li>
 <li><code><a title="ktrain.text.ner.anago.preprocessing.IndexTransformer.transform" href="#ktrain.text.ner.anago.preprocessing.IndexTransformer.transform">transform</a></code></li>
 <li><code><a title="ktrain.text.ner.anago.preprocessing.IndexTransformer.transformer_is_activated" href="#ktrain.text.ner.anago.preprocessing.IndexTransformer.transformer_is_activated">transformer_is_activated</a></code></li>
 <li><code><a title="ktrain.text.ner.anago.preprocessing.IndexTransformer.word_vocab_size" href="#ktrain.text.ner.anago.preprocessing.IndexTransformer.word_vocab_size">word_vocab_size</a></code></li>
@@ -1173,7 +1347,7 @@ y : iterabl, label strings.</p>
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.9.2</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
 </footer>
 </body>
 </html>

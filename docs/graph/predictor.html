@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.9.2" />
+<meta name="generator" content="pdoc 0.10.0" />
 <title>ktrain.graph.predictor API documentation</title>
 <meta name="description" content="" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
@@ -26,10 +26,11 @@
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">from ..imports import *
+<pre><code class="python">from .. import utils as U
+from ..imports import *
 from ..predictor import Predictor
-from .preprocessor import NodePreprocessor, LinkPreprocessor
-from .. import utils as U
+from .preprocessor import LinkPreprocessor, NodePreprocessor
+
 
 class NodePredictor(Predictor):
     &#34;&#34;&#34;
@@ -39,26 +40,24 @@ class NodePredictor(Predictor):
     &#34;&#34;&#34;
 
     def __init__(self, model, preproc, batch_size=U.DEFAULT_BS):
-
         if not isinstance(model, keras.Model):
-            raise ValueError(&#39;model must be of instance keras.Model&#39;)
+            raise ValueError(&#34;model must be of instance keras.Model&#34;)
         if not isinstance(preproc, NodePreprocessor):
-            raise ValueError(&#39;preproc must be a NodePreprocessor object&#39;)
+            raise ValueError(&#34;preproc must be a NodePreprocessor object&#34;)
         self.model = model
         self.preproc = preproc
         self.c = self.preproc.get_classes()
         self.batch_size = batch_size
 
-
     def get_classes(self):
         return self.c
 
+    def predict(self, node_ids, return_proba=False, verbose=0):
+        return self.predict_transductive(
+            node_ids, return_proba=return_proba, verbose=verbose
+        )
 
-    def predict(self, node_ids, return_proba=False):
-        return self.predict_transductive(node_ids, return_proba=return_proba)
-
-
-    def predict_transductive(self, node_ids, return_proba=False):
+    def predict_transductive(self, node_ids, return_proba=False, verbose=0):
         &#34;&#34;&#34;
         ```
         Performs transductive inference.
@@ -68,13 +67,12 @@ class NodePredictor(Predictor):
         gen = self.preproc.preprocess_valid(node_ids)
         gen.batch_size = self.batch_size
         # *_generator methods are deprecated from TF 2.1.0
-        #preds = self.model.predict_generator(gen)
-        preds = self.model.predict(gen)
-        result =  preds if return_proba else [self.c[np.argmax(pred)] for pred in preds]
+        # preds = self.model.predict_generator(gen)
+        preds = self.model.predict(gen, verbose=verbose)
+        result = preds if return_proba else [self.c[np.argmax(pred)] for pred in preds]
         return result
 
-
-    def predict_inductive(self, df, G, return_proba=False):
+    def predict_inductive(self, df, G, return_proba=False, verbose=0):
         &#34;&#34;&#34;
         ```
         Performs inductive inference.
@@ -85,9 +83,9 @@ class NodePredictor(Predictor):
         gen = self.preproc.preprocess(df, G)
         gen.batch_size = self.batch_size
         # *_generator methods are deprecated from TF 2.1.0
-        #preds = self.model.predict_generator(gen)
-        preds = self.model.predict(gen)
-        result =  preds if return_proba else [self.c[np.argmax(pred)] for pred in preds]
+        # preds = self.model.predict_generator(gen)
+        preds = self.model.predict(gen, verbose=verbose)
+        result = preds if return_proba else [self.c[np.argmax(pred)] for pred in preds]
         return result
 
 
@@ -99,22 +97,19 @@ class LinkPredictor(Predictor):
     &#34;&#34;&#34;
 
     def __init__(self, model, preproc, batch_size=U.DEFAULT_BS):
-
         if not isinstance(model, keras.Model):
-            raise ValueError(&#39;model must be of instance keras.Model&#39;)
+            raise ValueError(&#34;model must be of instance keras.Model&#34;)
         if not isinstance(preproc, LinkPreprocessor):
-            raise ValueError(&#39;preproc must be a LinkPreprocessor object&#39;)
+            raise ValueError(&#34;preproc must be a LinkPreprocessor object&#34;)
         self.model = model
         self.preproc = preproc
         self.c = self.preproc.get_classes()
         self.batch_size = batch_size
 
-
     def get_classes(self):
         return self.c
 
-
-    def predict(self, G, edge_ids, return_proba=False):
+    def predict(self, G, edge_ids, return_proba=False, verbose=0):
         &#34;&#34;&#34;
         ```
         Performs link prediction
@@ -124,12 +119,12 @@ class LinkPredictor(Predictor):
         gen = self.preproc.preprocess(G, edge_ids)
         gen.batch_size = self.batch_size
         # *_generator methods are deprecated from TF 2.1.0
-        #preds = self.model.predict_generator(gen)
-        preds = self.model.predict(gen)
+        # preds = self.model.predict_generator(gen)
+        preds = self.model.predict(gen, verbose=verbose)
         preds = np.squeeze(preds)
         if return_proba:
-            return [[1-pred, pred] for pred in preds] 
-        result =  np.where(preds &gt; 0.5, self.c[1], self.c[0])
+            return [[1 - pred, pred] for pred in preds]
+        result = np.where(preds &gt; 0.5, self.c[1], self.c[0])
         return result</code></pre>
 </details>
 </section>
@@ -161,22 +156,19 @@ class LinkPredictor(Predictor):
     &#34;&#34;&#34;
 
     def __init__(self, model, preproc, batch_size=U.DEFAULT_BS):
-
         if not isinstance(model, keras.Model):
-            raise ValueError(&#39;model must be of instance keras.Model&#39;)
+            raise ValueError(&#34;model must be of instance keras.Model&#34;)
         if not isinstance(preproc, LinkPreprocessor):
-            raise ValueError(&#39;preproc must be a LinkPreprocessor object&#39;)
+            raise ValueError(&#34;preproc must be a LinkPreprocessor object&#34;)
         self.model = model
         self.preproc = preproc
         self.c = self.preproc.get_classes()
         self.batch_size = batch_size
 
-
     def get_classes(self):
         return self.c
 
-
-    def predict(self, G, edge_ids, return_proba=False):
+    def predict(self, G, edge_ids, return_proba=False, verbose=0):
         &#34;&#34;&#34;
         ```
         Performs link prediction
@@ -186,12 +178,12 @@ class LinkPredictor(Predictor):
         gen = self.preproc.preprocess(G, edge_ids)
         gen.batch_size = self.batch_size
         # *_generator methods are deprecated from TF 2.1.0
-        #preds = self.model.predict_generator(gen)
-        preds = self.model.predict(gen)
+        # preds = self.model.predict_generator(gen)
+        preds = self.model.predict(gen, verbose=verbose)
         preds = np.squeeze(preds)
         if return_proba:
-            return [[1-pred, pred] for pred in preds] 
-        result =  np.where(preds &gt; 0.5, self.c[1], self.c[0])
+            return [[1 - pred, pred] for pred in preds]
+        result = np.where(preds &gt; 0.5, self.c[1], self.c[0])
         return result</code></pre>
 </details>
 <h3>Ancestors</h3>
@@ -215,7 +207,7 @@ class LinkPredictor(Predictor):
 </details>
 </dd>
 <dt id="ktrain.graph.predictor.LinkPredictor.predict"><code class="name flex">
-<span>def <span class="ident">predict</span></span>(<span>self, G, edge_ids, return_proba=False)</span>
+<span>def <span class="ident">predict</span></span>(<span>self, G, edge_ids, return_proba=False, verbose=0)</span>
 </code></dt>
 <dd>
 <div class="desc"><pre><code>Performs link prediction
@@ -225,7 +217,7 @@ If return_proba is True, returns probabilities of each class.
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def predict(self, G, edge_ids, return_proba=False):
+<pre><code class="python">def predict(self, G, edge_ids, return_proba=False, verbose=0):
     &#34;&#34;&#34;
     ```
     Performs link prediction
@@ -235,12 +227,12 @@ If return_proba is True, returns probabilities of each class.
     gen = self.preproc.preprocess(G, edge_ids)
     gen.batch_size = self.batch_size
     # *_generator methods are deprecated from TF 2.1.0
-    #preds = self.model.predict_generator(gen)
-    preds = self.model.predict(gen)
+    # preds = self.model.predict_generator(gen)
+    preds = self.model.predict(gen, verbose=verbose)
     preds = np.squeeze(preds)
     if return_proba:
-        return [[1-pred, pred] for pred in preds] 
-    result =  np.where(preds &gt; 0.5, self.c[1], self.c[0])
+        return [[1 - pred, pred] for pred in preds]
+    result = np.where(preds &gt; 0.5, self.c[1], self.c[0])
     return result</code></pre>
 </details>
 </dd>
@@ -276,26 +268,24 @@ If return_proba is True, returns probabilities of each class.
     &#34;&#34;&#34;
 
     def __init__(self, model, preproc, batch_size=U.DEFAULT_BS):
-
         if not isinstance(model, keras.Model):
-            raise ValueError(&#39;model must be of instance keras.Model&#39;)
+            raise ValueError(&#34;model must be of instance keras.Model&#34;)
         if not isinstance(preproc, NodePreprocessor):
-            raise ValueError(&#39;preproc must be a NodePreprocessor object&#39;)
+            raise ValueError(&#34;preproc must be a NodePreprocessor object&#34;)
         self.model = model
         self.preproc = preproc
         self.c = self.preproc.get_classes()
         self.batch_size = batch_size
 
-
     def get_classes(self):
         return self.c
 
+    def predict(self, node_ids, return_proba=False, verbose=0):
+        return self.predict_transductive(
+            node_ids, return_proba=return_proba, verbose=verbose
+        )
 
-    def predict(self, node_ids, return_proba=False):
-        return self.predict_transductive(node_ids, return_proba=return_proba)
-
-
-    def predict_transductive(self, node_ids, return_proba=False):
+    def predict_transductive(self, node_ids, return_proba=False, verbose=0):
         &#34;&#34;&#34;
         ```
         Performs transductive inference.
@@ -305,13 +295,12 @@ If return_proba is True, returns probabilities of each class.
         gen = self.preproc.preprocess_valid(node_ids)
         gen.batch_size = self.batch_size
         # *_generator methods are deprecated from TF 2.1.0
-        #preds = self.model.predict_generator(gen)
-        preds = self.model.predict(gen)
-        result =  preds if return_proba else [self.c[np.argmax(pred)] for pred in preds]
+        # preds = self.model.predict_generator(gen)
+        preds = self.model.predict(gen, verbose=verbose)
+        result = preds if return_proba else [self.c[np.argmax(pred)] for pred in preds]
         return result
 
-
-    def predict_inductive(self, df, G, return_proba=False):
+    def predict_inductive(self, df, G, return_proba=False, verbose=0):
         &#34;&#34;&#34;
         ```
         Performs inductive inference.
@@ -322,9 +311,9 @@ If return_proba is True, returns probabilities of each class.
         gen = self.preproc.preprocess(df, G)
         gen.batch_size = self.batch_size
         # *_generator methods are deprecated from TF 2.1.0
-        #preds = self.model.predict_generator(gen)
-        preds = self.model.predict(gen)
-        result =  preds if return_proba else [self.c[np.argmax(pred)] for pred in preds]
+        # preds = self.model.predict_generator(gen)
+        preds = self.model.predict(gen, verbose=verbose)
+        result = preds if return_proba else [self.c[np.argmax(pred)] for pred in preds]
         return result</code></pre>
 </details>
 <h3>Ancestors</h3>
@@ -348,7 +337,7 @@ If return_proba is True, returns probabilities of each class.
 </details>
 </dd>
 <dt id="ktrain.graph.predictor.NodePredictor.predict"><code class="name flex">
-<span>def <span class="ident">predict</span></span>(<span>self, node_ids, return_proba=False)</span>
+<span>def <span class="ident">predict</span></span>(<span>self, node_ids, return_proba=False, verbose=0)</span>
 </code></dt>
 <dd>
 <div class="desc"></div>
@@ -356,12 +345,14 @@ If return_proba is True, returns probabilities of each class.
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def predict(self, node_ids, return_proba=False):
-    return self.predict_transductive(node_ids, return_proba=return_proba)</code></pre>
+<pre><code class="python">def predict(self, node_ids, return_proba=False, verbose=0):
+    return self.predict_transductive(
+        node_ids, return_proba=return_proba, verbose=verbose
+    )</code></pre>
 </details>
 </dd>
 <dt id="ktrain.graph.predictor.NodePredictor.predict_inductive"><code class="name flex">
-<span>def <span class="ident">predict_inductive</span></span>(<span>self, df, G, return_proba=False)</span>
+<span>def <span class="ident">predict_inductive</span></span>(<span>self, df, G, return_proba=False, verbose=0)</span>
 </code></dt>
 <dd>
 <div class="desc"><pre><code>Performs inductive inference.
@@ -371,7 +362,7 @@ If return_proba is True, returns probabilities of each class.
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def predict_inductive(self, df, G, return_proba=False):
+<pre><code class="python">def predict_inductive(self, df, G, return_proba=False, verbose=0):
     &#34;&#34;&#34;
     ```
     Performs inductive inference.
@@ -382,14 +373,14 @@ If return_proba is True, returns probabilities of each class.
     gen = self.preproc.preprocess(df, G)
     gen.batch_size = self.batch_size
     # *_generator methods are deprecated from TF 2.1.0
-    #preds = self.model.predict_generator(gen)
-    preds = self.model.predict(gen)
-    result =  preds if return_proba else [self.c[np.argmax(pred)] for pred in preds]
+    # preds = self.model.predict_generator(gen)
+    preds = self.model.predict(gen, verbose=verbose)
+    result = preds if return_proba else [self.c[np.argmax(pred)] for pred in preds]
     return result</code></pre>
 </details>
 </dd>
 <dt id="ktrain.graph.predictor.NodePredictor.predict_transductive"><code class="name flex">
-<span>def <span class="ident">predict_transductive</span></span>(<span>self, node_ids, return_proba=False)</span>
+<span>def <span class="ident">predict_transductive</span></span>(<span>self, node_ids, return_proba=False, verbose=0)</span>
 </code></dt>
 <dd>
 <div class="desc"><pre><code>Performs transductive inference.
@@ -399,7 +390,7 @@ If return_proba is True, returns probabilities of each class.
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def predict_transductive(self, node_ids, return_proba=False):
+<pre><code class="python">def predict_transductive(self, node_ids, return_proba=False, verbose=0):
     &#34;&#34;&#34;
     ```
     Performs transductive inference.
@@ -409,9 +400,9 @@ If return_proba is True, returns probabilities of each class.
     gen = self.preproc.preprocess_valid(node_ids)
     gen.batch_size = self.batch_size
     # *_generator methods are deprecated from TF 2.1.0
-    #preds = self.model.predict_generator(gen)
-    preds = self.model.predict(gen)
-    result =  preds if return_proba else [self.c[np.argmax(pred)] for pred in preds]
+    # preds = self.model.predict_generator(gen)
+    preds = self.model.predict(gen, verbose=verbose)
+    result = preds if return_proba else [self.c[np.argmax(pred)] for pred in preds]
     return result</code></pre>
 </details>
 </dd>
@@ -466,7 +457,7 @@ If return_proba is True, returns probabilities of each class.
 </nav>
 </main>
 <footer id="footer">
-<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.9.2</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
 </footer>
 </body>
 </html>
